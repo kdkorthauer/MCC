@@ -71,16 +71,16 @@ maf@clinical.data$type <- ifelse(grepl("CL", maf@clinical.data$Tumor_Sample_Barc
 
 Overall (all three are viral positive): 
 
-```{r, maf_summary, fig.path="plots", dev="png"}
+```{r, maf_summary, fig.path="plots/", dev="png"}
 plotmafSummary(maf = maf, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
 ```
 
-```{r, titv_summary, fig.path="plots", dev="png"}
+```{r, titv_summary, fig.path="plots/", dev="png"}
 titv.maf <- titv(maf)
 titv.maf$raw.counts
 ```
 
-```{r, signatures, fig.path="plots", dev="png"}
+```{r, signatures, fig.path="plots/", dev="png"}
 mat <- trinucleotideMatrix(maf, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
          prefix ='chr', add = TRUE, useSyn = TRUE)
 require(NMF)
@@ -90,26 +90,26 @@ plotSignatures(sig)
 
 Compare cell lines to tumors:
 
-```{r, enrichment, fig.path="plots", dev="png"}
+```{r, enrichment, fig.path="plots/", dev="png"}
 enrich <- clinicalEnrichment(maf, clinicalFeature = "type", minMut = 2)
 plotEnrichmentResults(enrich, pVal = 0.1)
 ```
 
 ## Tumors only
 
-```{r, maf_summary_T, fig.path="plots", dev="png"}
+```{r, maf_summary_T, fig.path="plots/", dev="png"}
 tumors <- maf@clinical.data$Tumor_Sample_Barcode
 tumors <- tumors[grepl("T", tumors)]
 mafT <- subsetMaf(maf, tsb = tumors, mafObj = TRUE)
 plotmafSummary(maf = mafT, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
 ```
 
-```{r, titv_summary_T, fig.path="plots", dev="png"}
+```{r, titv_summary_T, fig.path="plots/", dev="png"}
 titv.maf <- titv(mafT)
 titv.maf$raw.counts
 ```
 
-```{r, signatures_T, fig.path="plots", dev="png"}
+```{r, signatures_T, fig.path="plots/", dev="png", eval = FALSE}
 mat <- trinucleotideMatrix(mafT, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
          prefix ='chr', add = TRUE, useSyn = TRUE)
 sig <- extractSignatures(mat)
@@ -118,19 +118,19 @@ plotSignatures(sig)
 
 ## Cell lines only
 
-```{r, maf_summary_CL, fig.path="plots", dev="png"}
+```{r, maf_summary_CL, fig.path="plots/", dev="png"}
 cl <- maf@clinical.data$Tumor_Sample_Barcode
 cl <- cl[grepl("CL", cl)]
 mafCL <- subsetMaf(maf, tsb = cl, mafObj = TRUE)
 plotmafSummary(maf = mafCL, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
 ```
 
-```{r, titv_summary_CL, fig.path="plots", dev="png"}
+```{r, titv_summary_CL, fig.path="plots/", dev="png"}
 titv.maf <- titv(mafCL)
 titv.maf$raw.counts
 ```
 
-```{r, signatures_CL, fig.path="plots", dev="png"}
+```{r, signatures_CL, fig.path="plots/", dev="png", eval=FALSE}
 mat <- trinucleotideMatrix(mafCL, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
          prefix ='chr', add = TRUE, useSyn = TRUE)
 sig <- extractSignatures(mat)
@@ -143,7 +143,7 @@ plotSignatures(sig)
 dev.off()
 ```
 
-```{r rainfall, fig.height = 5, fig.width = 7, fig.path="plots", dev="png"}
+```{r rainfall, fig.height = 5, fig.width = 7, fig.path="plots/", dev="png"}
 for (s in maf@clinical.data$Tumor_Sample_Barcode){
   p <- rainfallPlot(maf, tsb = s, detectChangePoints = TRUE)
   print(p)
@@ -152,11 +152,11 @@ for (s in maf@clinical.data$Tumor_Sample_Barcode){
 
 # Clusters
 
-```{r heterogeneity, fig.path="plots", dev="png"}
+```{r heterogeneity, fig.path="plots/", dev="png"}
 clusters <- inferHeterogeneity(maf)
 clusters
 
-for (s in maf@clinical.data$Tumor_Sample_Barcode){
+for (s in unique(clusters$clusterMeans$Tumor_Sample_Barcode)){
   p <- plotClusters(clusters, tsb = s)
   print(p)
 }
@@ -166,7 +166,7 @@ for (s in maf@clinical.data$Tumor_Sample_Barcode){
 
 # Co-mut plots
 
-```{r comut, fig.height = 8.5, fig.width = 6, fig.path="plots", dev="png"}
+```{r comut, fig.height = 8.5, fig.width = 6, fig.path="plots/", dev="png"}
 fabcolors = RColorBrewer::brewer.pal(n = 4,name = 'Set1')[c(1,2,4)]
 names(fabcolors) = c("277", "314", "310")
 fabcolors = list(patient = fabcolors)
