@@ -9,6 +9,7 @@
 cd ../../../PREPROCESS/DNA/
 
 # activate python environment with CNVkit installed
+module load python
 source activate cnvkit
 
 # build accessible regions
@@ -27,6 +28,6 @@ if [ ! -f cnvkit-results/my_reference.cnn ]; then
 fi
 
 # reuse reference.cnn for Cell line samples
-if [! -f cnvkit-results/DFCI-5369-CL-01.targetcoverage.cnn ]; then
+if [ ! -f cnvkit-results/DFCI-5369-CL-01.targetcoverage.cnn ]; then
   cnvkit.py batch ../../DATA/DNA/*CL-01.bam -r cnvkit-results/my_reference.cnn -p 4 --scatter --diagram -d cnvkit-results/
 fi

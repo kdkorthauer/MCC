@@ -1,0 +1,186 @@
+---
+title: "MCC Exome seq - compare tumor and cell line"
+author: "Keegan Korthauer"
+output: 
+    html_document:
+        toc: true
+        toc_float: true
+        highlight: tango
+        number_sections: true
+        code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Summary
+
+Here we take a look at the expression (exome DNA-seq) data from the samples sequenced 
+thus far for both MCC patient tumors, their matching patient-derived cell 
+lines, and normal PBMCs.
+
+# Workspace setup
+
+Here we'll load the necessary R packages.
+
+```{r, message = FALSE, warning = FALSE}
+library(ggplot2)
+theme_set(theme_bw())
+library(RColorBrewer) 
+library(maftools)
+
+mafdir <- "../../PREPROCESS/DNA/mutect-results/"
+```
+
+Read in maf files:
+
+```{r}
+maf.files <- list.files(path = mafdir, pattern = "*.maf", full.names = TRUE)
+
+maf = maftools:::merge_mafs(maf = maf.files, MAFobj = TRUE)
+```
+
+We'll also add in the metadata from the de-identified excel file so we can map
+the Broad sample IDs back to the original MCC patient ids. Excel file doesn't 
+contain one observation per cell, so we'll have to manually enter the information.
+
+```{r}
+# 5350 -> 336
+# 5351 -> 350
+# 5367 -> 277
+# 5368 -> 02-314 (simplified to 314)
+# 5369 -> 301
+# 5370 -> 286
+# 5474 -> 367
+# 5473 -> 320
+# 5475 -> 290
+# 5476 -> 282
+# 5477 -> 275 
+# 5478 -> 358
+
+maf@clinical.data$patient <- ifelse(grepl("5367", maf@clinical.data$Tumor_Sample_Barcode), "277",
+                          ifelse(grepl("5368", maf@clinical.data$Tumor_Sample_Barcode), "314",
+                          ifelse(grepl("5369", maf@clinical.data$Tumor_Sample_Barcode), "310",
+                          NA)))
+maf@clinical.data$type <- ifelse(grepl("CL", maf@clinical.data$Tumor_Sample_Barcode), "Cell Line",
+                          "Tumor")
+```
+
+# Summary plots
+
+Overall (all three are viral positive): 
+
+```{r, maf_summary, fig.path="plots", dev="png"}
+plotmafSummary(maf = maf, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+```
+
+```{r, titv_summary, fig.path="plots", dev="png"}
+titv.maf <- titv(maf)
+titv.maf$raw.counts
+```
+
+```{r, signatures, fig.path="plots", dev="png"}
+mat <- trinucleotideMatrix(maf, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
+         prefix ='chr', add = TRUE, useSyn = TRUE)
+require(NMF)
+sig <- extractSignatures(mat)
+plotSignatures(sig)
+```
+
+Compare cell lines to tumors:
+
+```{r, enrichment, fig.path="plots", dev="png"}
+enrich <- clinicalEnrichment(maf, clinicalFeature = "type", minMut = 2)
+plotEnrichmentResults(enrich, pVal = 0.1)
+```
+
+## Tumors only
+
+```{r, maf_summary_T, fig.path="plots", dev="png"}
+tumors <- maf@clinical.data$Tumor_Sample_Barcode
+tumors <- tumors[grepl("T", tumors)]
+mafT <- subsetMaf(maf, tsb = tumors, mafObj = TRUE)
+plotmafSummary(maf = mafT, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+```
+
+```{r, titv_summary_T, fig.path="plots", dev="png"}
+titv.maf <- titv(mafT)
+titv.maf$raw.counts
+```
+
+```{r, signatures_T, fig.path="plots", dev="png"}
+mat <- trinucleotideMatrix(mafT, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
+         prefix ='chr', add = TRUE, useSyn = TRUE)
+sig <- extractSignatures(mat)
+plotSignatures(sig)
+```
+
+## Cell lines only
+
+```{r, maf_summary_CL, fig.path="plots", dev="png"}
+cl <- maf@clinical.data$Tumor_Sample_Barcode
+cl <- cl[grepl("CL", cl)]
+mafCL <- subsetMaf(maf, tsb = cl, mafObj = TRUE)
+plotmafSummary(maf = mafCL, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+```
+
+```{r, titv_summary_CL, fig.path="plots", dev="png"}
+titv.maf <- titv(mafCL)
+titv.maf$raw.counts
+```
+
+```{r, signatures_CL, fig.path="plots", dev="png"}
+mat <- trinucleotideMatrix(mafCL, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
+         prefix ='chr', add = TRUE, useSyn = TRUE)
+sig <- extractSignatures(mat)
+plotSignatures(sig)
+```
+
+# Rainfall plots
+
+```{r, echo=FALSE}
+dev.off()
+```
+
+```{r rainfall, fig.height = 5, fig.width = 7, fig.path="plots", dev="png"}
+for (s in maf@clinical.data$Tumor_Sample_Barcode){
+  p <- rainfallPlot(maf, tsb = s, detectChangePoints = TRUE)
+  print(p)
+}
+```
+
+# Clusters
+
+```{r heterogeneity, fig.path="plots", dev="png"}
+clusters <- inferHeterogeneity(maf)
+clusters
+
+for (s in maf@clinical.data$Tumor_Sample_Barcode){
+  p <- plotClusters(clusters, tsb = s)
+  print(p)
+}
+```
+
+
+
+# Co-mut plots
+
+```{r comut, fig.height = 8.5, fig.width = 6, fig.path="plots", dev="png"}
+fabcolors = RColorBrewer::brewer.pal(n = 4,name = 'Set1')[c(1,2,4)]
+names(fabcolors) = c("277", "314", "310")
+fabcolors = list(patient = fabcolors)
+
+oncoplot(maf = maf, top = 50, fontSize = 9, 
+         clinicalFeatures = c('type', "patient"),
+         annotationColor = fabcolors, 
+         sampleOrder = c("DFCI-5367-CL-01", "DFCI-5367-T-01",
+                         "DFCI-5368-CL-01", "DFCI-5368-T-01",
+                         "DFCI-5369-CL-01", "DFCI-5369-T-01"))
+```
+
+# Session Information
+
+```{r}
+sessionInfo()
+```

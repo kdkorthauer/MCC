@@ -15,5 +15,7 @@
 *.bedGraph
 *.cnn
 *.jar
+*.tsv
+._*
 DATA/*
 PREPROCESS/*

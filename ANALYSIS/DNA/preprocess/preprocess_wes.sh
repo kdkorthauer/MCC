@@ -1,5 +1,20 @@
 # this script calls the "call_mutations_single.sh" script to call somatic 
-# mutations using mutect. Next, it calls "run_cnvkit.sh" to run CNVkit.
+# mutations using mutect. Then it annotates mutations using VEP and the
+# vcf2maf tool. Next, it calls "run_cnvkit.sh" to run CNVkit.
+
+
+# convert vcf to maf
+# first install VEP with https://gist.github.com/ckandoth/f265ea7c59a880e28b1e533a6e935697
+# next install vcf2maf tool with https://github.com/mskcc/vcf2maf:
+module load samtools
+
+# only run once to install vcf2maf. Assumes VEP is already installed.
+if [ ! -f ../../../PREPROCESS/DNA/mskcc-vcf2maf-*/vcf2maf.pl  ]; then
+  export VCF2MAF_URL=`curl -sL https://api.github.com/repos/mskcc/vcf2maf/releases | grep -m1 tarball_url | cut -d\" -f4`
+  curl -L -o ../../PREPROCESS/DNA/mskcc-vcf2maf.tar.gz $VCF2MAF_URL
+  tar -xvf ../../PREPROCESS/DNA/mskcc-vcf2maf.tar.gz -C ../../PREPROCESS/DNA/
+  chmod +x ../../PREPROCESS/DNA/mskcc-vcf2maf-*/*.pl
+fi
 
 # call mutations - loop over all tumor / normal pairs 
 
@@ -20,14 +35,9 @@ sleep 1
 done
 
 
-# convert vcf to maf
-# first install VEP with https://gist.github.com/ckandoth/f265ea7c59a880e28b1e533a6e935697
-# ^ run into problems install.pl line still missing modules
-# next install vcf2maf tool with https://github.com/mskcc/vcf2maf
-
-
 ##################### run CNVkit ############################
 sbatch -o ../slurm/${id}cnvkit.out -e ../slurm/${id}cnvkit.err run_cnvkit.sh
+
 
 ##################### run vcf2maf
 # first install VEP (https://github.com/Ensembl/ensembl-vep) - install perl module DBI
@@ -35,15 +45,5 @@ sbatch -o ../slurm/${id}cnvkit.out -e ../slurm/${id}cnvkit.err run_cnvkit.sh
 
 ## VEP installed - need to install vcf2maf now https://github.com/mskcc/vcf2maf
 
-# and add the following to bashrc
-export PERL_MM_OPT="INSTALL_BASE=$LOCALPERL" 
-export PERL_MB_OPT="--install_base $LOCALPERL" 
-export PATH="$LOCALPERL/bin:$PATH" cd $HOME/apps/src
 
 
-In your .bashrc include the following lines:
-export LOCALPERL=$HOME/apps/perl
-export PERL5LIB=$LOCALPERL:$LOCALPERL/lib/perl5:$PERL5LIB
-export PERL_MM_OPT="INSTALL_BASE=$LOCALPERL"
-export PERL_MB_OPT="--install_base $LOCALPERL"
-export PATH="$LOCALPERL/bin:$PATH"

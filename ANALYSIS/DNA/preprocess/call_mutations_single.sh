@@ -3,8 +3,8 @@
 #SBATCH -n 1
 #SBATCH -N 1
 #SBATCH -p shared,commons,serial_requeue
-#SBATCH --mem 10G
-#SBATCH -t 0-99:00
+#SBATCH --mem 40G
+#SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
 mkdir -p mutect-results
@@ -14,7 +14,7 @@ module load java/1.7.0_60-fasrc01
 
 # run MuTect if output file does not already exist 
 
-if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\.vcf  ]; then
+if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\.vcf ]; then
   java -Xmx2g -jar mutect-src/mutect/target/mutect-1.1.7.jar \
     --analysis_type MuTect \
     --reference_sequence annotation/GATK_bundle_b37/human_g1k_v37.fasta \
@@ -24,17 +24,28 @@ if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\.vcf  ]; then
     --out mutect-results/$(basename $TUMOR_BAM .bam)\_call_stats.txt \
     --coverage_file mutect-results/$(basename $TUMOR_BAM .bam)\_coverage.wig.txt \
     -vcf mutect-results/$(basename $TUMOR_BAM .bam)\.vcf 
-
-  # can't use the COSMIC file, or get a java error....
-  #--cosmic annotation/COSMIC/b37_cosmic_v54_120711.vcf \
-
-  # for testing short regions use, e.g.
-  # --intervals 1:10000000-10100000 \
 fi
 
+# can't use the COSMIC file, or get a java error....
+#--cosmic annotation/COSMIC/b37_cosmic_v54_120711.vcf \
+
+# for testing short regions use, e.g.
+# --intervals 1:10000000-10100000 \
+
 # on output, extract PASS mutations in separate vcf file
-if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\_muts.vcf  ]; then
+if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\_muts.vcf ]; then
   grep -v REJECT mutect-results/$(basename $TUMOR_BAM .bam)\.vcf  > mutect-results/$(basename $TUMOR_BAM .bam)\_muts.vcf 
 fi
 
+
+# convert vcf to maf
+if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\_muts.maf ]; then
+  module load tabix
+  perl mskcc-vcf2maf-*/vcf2maf.pl \
+    --input-vcf mutect-results/$(basename $TUMOR_BAM .bam)\_muts.vcf \
+    --output-maf mutect-results/$(basename $TUMOR_BAM .bam)\_muts.maf \
+    --tumor-id $(basename $TUMOR_BAM .bam) \
+    --normal-id $(basename $NORMAL_BAM .bam) \
+    --ref-fasta $HOME/.vep/homo_sapiens/86_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz
+fi
 
