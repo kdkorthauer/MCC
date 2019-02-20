@@ -16,6 +16,7 @@
 *.cnn
 *.jar
 *.tsv
+*.Rout
 ._*
 DATA/*
 PREPROCESS/*
