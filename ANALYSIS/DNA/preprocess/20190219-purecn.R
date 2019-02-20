@@ -4,8 +4,10 @@ library(BiocParallel)
 
 annot.dir <- "../../../PREPROCESS/DNA/annotation"
 out.dir <- "../../../PREPROCESS/DNA/purecn"
+plot.dir <- file.path(out.dir, "plots")
 mutect.dir <- "../../../PREPROCESS/DNA/mutect-results"
 dir.create(out.dir, showWarnings = FALSE)
+dir.create(plot.dir, showWarnings = FALSE)
 bam.dir <- "../../../DATA/DNA"
 
 register(MulticoreParam(6))
@@ -147,7 +149,7 @@ for (f in coverage.files){
   if (!file.exists(this.out)){  
     message("Creating file ", this.out, "...")
     
-    pdf(file.path(out.dir,
+    pdf(file.path(plot.dir,
                  gsub("_coverage.txt", "_gcbias.pdf", f)),
         width = 10, height = 5)
     correctCoverageBias(file.path(out.dir,f), interval.file, 
@@ -207,7 +209,7 @@ for (f in c(t.coverage.files, cl.coverage.files)){
 ## ----expected variance - target weight file-----------------------------------
 interval.weight.file <- file.path(out.dir, "interval_weights.txt")
 if (!file.exists(interval.weight.file)){
-  pdf(file.path(out.dir, "interval_weight_plot.pdf"))
+  pdf(file.path(plot.dir, "interval_weight_plot.pdf"))
     calculateIntervalWeights(normalDB$normal.coverage.files, 
                          interval.weight.file,
                          plot = TRUE)
@@ -247,7 +249,7 @@ for (f in vcf.files){
   tcov <- file.path(out.dir, 
                     gsub(".vcf", "_coverage_loessnorm.txt", f)) 
 
-  plot.file <- file.path(out.dir, 
+  plot.file <- file.path(plot.dir, 
                     gsub(".vcf", "_CNplots.pdf", f))
   
   if (!file.exists(ncov) || !file.exists(tcov)){
@@ -271,21 +273,20 @@ for (f in vcf.files){
                                               stats.file = mutect.stats.file),
                          post.optimize = FALSE) 
     dev.off()
-
     saveRDS(ret, file = this.out)
 
-    pdf(file.path(out.dir, gsub(".vcf", "_CNplots_overview.pdf", f)), 
-      width = 8, height = 8)
+    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_overview.pdf", f)), 
+      width = 6, height = 6)
     plotAbs(ret, type="overview")
     dev.off()
 
-    pdf(file.path(out.dir, gsub(".vcf", "_CNplots_overview.pdf", f)), 
-      width = 8, height = 8)
+    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_hist.pdf", f)), 
+      width = 6, height = 6)
     plotAbs(ret, 1, type="hist")
     dev.off()
 
-    pdf(file.path(out.dir, gsub(".vcf", "_CNplots_overview.pdf", f)), 
-      width = 12, height = 12)
+    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_baf.pdf", f)), 
+      width = 8, height = 8)
     plotAbs(ret, 1, type="BAF")
     dev.off()
 

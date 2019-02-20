@@ -17,6 +17,7 @@
 *.jar
 *.tsv
 *.Rout
+*.history
 ._*
 DATA/*
 PREPROCESS/*
