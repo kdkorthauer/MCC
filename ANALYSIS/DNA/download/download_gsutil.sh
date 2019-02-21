@@ -14,7 +14,7 @@ outfile=/n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/
 module load Anaconda/5.0.1-fasrc02
 source activate gcloud2
 
-fnames="$(cut -f8 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/firecloud_Wu_MCC_exome_metadata.txt)"
+fnames="$(cut -f8 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/sample.tsv)"
 
 for f in $fnames 
 do
@@ -25,7 +25,7 @@ do
   fi
 done
 
-fnames="$(cut -f7 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/firecloud_Wu_MCC_exome_metadata.txt)"
+fnames="$(cut -f7 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/sample.tsv)"
 
 # also get bais
 for f in $fnames 
@@ -41,4 +41,9 @@ done
 # now add "chr" to chromosome names (to be compatible with GATK ref fasta)
 module load samtools
 
-for file in *.bam; do filename=`echo $file | cut -d "." -f 1`; samtools view -H $file | sed -e 's/SN:\([0-9XY]\)/SN:chr\1/' -e 's/SN:MT/SN:chrM/' | samtools reheader - $file > ${filename}_chr.bam; done
+for file in *.bam
+do
+  filename=`echo $file | cut -d "." -f 1`
+  if [ ! -e "$outfile/${filename}_chr.bam" ]
+  samtools view -H $file | sed -e 's/SN:\([0-9XY]\)/SN:chr\1/' -e 's/SN:MT/SN:chrM/' | samtools reheader - $file > $outfile/${filename}_chr.bam 
+done

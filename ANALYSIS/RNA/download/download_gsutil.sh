@@ -14,7 +14,7 @@ outfile=/n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/
 module load Anaconda/5.0.1-fasrc02
 source activate gcloud2
 
-fnames="$(cut -f8 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/firecloud_Wu_MCC_RNAseq_metadata.txt)"
+fnames="$(cut -f8 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/sample.tsv)"
 
 for f in $fnames 
 do
@@ -26,7 +26,7 @@ do
 done
 
 
-fnames="$(cut -f7 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/firecloud_Wu_MCC_RNAseq_metadata.txt)"
+fnames="$(cut -f7 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/sample.tsv)"
 
 for f in $fnames 
 do
