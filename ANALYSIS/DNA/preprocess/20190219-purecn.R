@@ -26,7 +26,16 @@ mappability.file <- file.path(annot.dir,
 
 if(!file.exists(mappability.file)){
   download.file("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeMapability/wgEncodeCrgMapabilityAlign36mer.bigWig",
-	            destfile = mappability.file)
+	              destfile = mappability.file)
+}
+
+# get replication timing file:
+reptime.file <- file.path(annot.dir,
+                          "wgEncodeUwRepliSeqK562WaveSignalRep1.bigWig")
+
+if(!file.exists(reptime.file)){
+  download.file("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeUwRepliSeq/wgEncodeUwRepliSeqK562WaveSignalRep1.bigWig",
+                destfile = reptime.file)
 }
 
 # convert to GRanges
@@ -44,10 +53,20 @@ if (!file.exists(interval.file)){
   message("Creating file ", interval.file, "...")
 
   mappability <- import(mappability.file)
+  seqlevels(mappability) <- mapSeqlevels(seqlevels(mappability), "NCBI")
+
+  #remove chrMT from mappability:
+  mappability <- mappability[seqnames(mappability) != "MT",]
+  mappability <- dropSeqlevels(mappability, "MT")
+
+  reptime <- import(reptime.file)
+  seqlevels(reptime) <- mapSeqlevels(seqlevels(reptime), "NCBI")
 
   preprocessIntervals(intervals, reference.file, 
       mappability = mappability, 
-      output.file = interval.file)
+      reptiming = reptime,
+      output.file = interval.file,
+      off.target = TRUE)
 
   message("File ", interval.file, " finished.")
 }else{
@@ -151,7 +170,7 @@ for (f in coverage.files){
     
     pdf(file.path(plot.dir,
                  gsub("_coverage.txt", "_gcbias.pdf", f)),
-        width = 10, height = 5)
+        width = 10, height = 9.5)
     correctCoverageBias(file.path(out.dir,f), interval.file, 
       output.file = this.out, plot.bias = TRUE)
     dev.off()
