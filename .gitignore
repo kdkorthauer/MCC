@@ -18,6 +18,7 @@
 *.tsv
 *.Rout
 *.history
+*.Rout
 ._*
 DATA/*
 PREPROCESS/*
