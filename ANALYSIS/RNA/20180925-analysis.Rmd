@@ -85,7 +85,7 @@ contain one observation per cell, so we'll have to manually enter the informatio
 # 5350 -> 336
 # 5351 -> 350
 # 5367 -> 277
-# 5368 -> 02-314 (simplified to 314)
+# 5368 -> 2314
 # 5369 -> 301
 # 5370 -> 286
 # 5474 -> 367
@@ -95,8 +95,23 @@ contain one observation per cell, so we'll have to manually enter the informatio
 # 5477 -> 275 
 # 5478 -> 358
 
-colDat$mcc.id <- c("336", "336", "350", "350", "277", "277", "314", "314",
-                   "301", "301", "286")
+id.map <- rbind(c(5350, 336),
+                c(5351, 350),
+                c(5367, 277),
+                c(5368, 2314),
+                c(5369, 301),
+                c(5370, 286),
+                c(5474, 367),
+                c(5473, 320),
+                c(5475, 290),
+                c(5476, 282),
+                c(5477, 275),
+                c(5478, 358))
+id.map <- data.frame(id.map)
+colnames(id.map) <- c("id1", "id2")
+
+x <- match(as.numeric(gsub("DFCI_", "", colDat$dfci.id)), id.map$id1)
+colDat$mcc.id <- id.map$id2[x]
 ```
 
 Finally, we'll construct a DESeq dataset.
