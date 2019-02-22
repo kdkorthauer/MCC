@@ -1,4 +1,4 @@
-library(PureCN) 
+library(PureCN) # use version 1.13.10 or higher
 library(genomation)
 library(BiocParallel)
 
@@ -66,8 +66,10 @@ if (!file.exists(interval.file)){
       mappability = mappability, 
       reptiming = reptime,
       output.file = interval.file,
-      off.target = TRUE)
+      off.target = TRUE,
+      min.target.width = 100
 
+  rm(mappability)
   message("File ", interval.file, " finished.")
 }else{
   message("File ", interval.file, " already created.")
@@ -90,7 +92,6 @@ for (f in bam.files){
      interval.file = interval.file, 
      output.file = this.out)
 
-    rm(mappability)
     message("File ", this.out, " finished.")
   }else{
   	message("File ", this.out, " already created.")
@@ -98,67 +99,6 @@ for (f in bam.files){
 }
 
 ## ----library-specific gc-correction------------------------------------------
-
-# hacky patch to get over error thrown by span being too small
-# in PureCN function
-myCorrectCoverages <- function(tumor) {
-    if (is.null(tumor$on.target)) tumor$on.target <- TRUE
-    gc_bias <- tumor$gc_bias
-    for (on.target in c(FALSE, TRUE)) {
-        tumor$valid <- tumor$on.target == on.target
-        tumor$gc_bias <- gc_bias
-
-        tumor$valid[tumor$average.coverage <= 0 | tumor$gc_bias < 0] <- FALSE
-
-        if (!sum(tumor$valid)) next
-        tumor$ideal <- TRUE
-        routlier <- 0.01
-        range <- quantile(tumor$average.coverage[tumor$valid], prob = 
-            c(0, 1 - routlier), na.rm = TRUE)
-        doutlier <- 0.001
-        domain <- quantile(tumor$gc_bias[tumor$valid], prob = c(doutlier, 1 - doutlier), 
-            na.rm = TRUE)
-        
-        tumor$ideal[!tumor$valid | 
-            ( tumor$mappability < 1 & on.target ) |
-            tumor$average.coverage <= range[1] |
-            tumor$average.coverage > range[2] | 
-            tumor$gc_bias < domain[1] | 
-            tumor$gc_bias > domain[2]] <- FALSE
-        
-        if (!on.target) {    
-            widthR <- quantile(width(tumor[tumor$ideal]), prob=0.1)
-            tumor$ideal[width(tumor) < widthR] <- FALSE
-        }
-        rough <- loess(tumor$average.coverage[tumor$ideal] ~ tumor$gc_bias[tumor$ideal], 
-            span = 0.1)
-        i <- seq(0, 1, by = 0.001)
-        final <- loess(predict(rough, i) ~ i, span = 0.3)
-        cor.gc <- predict(final, tumor$gc_bias[tumor$valid])
-        cor.gc.factor <- cor.gc/mean(tumor$average.coverage[tumor$ideal], na.rm=TRUE)
-        cor.gc.factor[cor.gc.factor<=0] <- NA
-        tumor$gc_bias <- as.integer(tumor$gc_bias*100)/100
-
-        pre <- by(tumor$average.coverage[tumor$ideal], tumor$gc_bias[tumor$ideal], median, na.rm=TRUE)
-        medDiploid <- as.data.frame(cbind(as.numeric(names(pre)),as.vector(pre)))
-        colnames(medDiploid) <- c("gcIndex","denom")
-        
-        tumor$coverage[tumor$valid] <- (tumor$coverage[tumor$valid] / cor.gc.factor)
-        tumor$counts[tumor$valid] <- (tumor$counts[tumor$valid] / cor.gc.factor)
-        tumor <- .addAverageCoverage(tumor)
-
-        post <- by(tumor$average.coverage[tumor$ideal], tumor$gc_bias[tumor$ideal], median, na.rm=TRUE)
-        medDiploid$gcNum <- as.vector(post)
-        tumor$ideal <- NULL
-        tumor$valid <- NULL
-    }
-    list(coverage = tumor, medDiploid=medDiploid)
-}
-
-tmpfun <- get(".correctCoverageBiasLoess", envir = asNamespace("PureCN"))
-environment(myCorrectCoverages) <- environment(tmpfun)
-attributes(myCorrectCoverages) <- attributes(tmpfun)  # don't know if this is really needed
-assignInNamespace(".correctCoverageBiasLoess", myCorrectCoverages, ns="PureCN")
 
 coverage.files <- list.files(path = out.dir, pattern = "_coverage.txt")
 
