@@ -5,8 +5,8 @@
 #SBATCH -p shared,commons,serial_requeue
 #SBATCH --mem 20G
 #SBATCH -t 0-5:00
-#SBATCH -o ../../slurm/expl-%j.out
-#SBATCH -e ../../slurm/expl-%j.err
+#SBATCH -o ../slurm/expl-%j.out
+#SBATCH -e ../slurm/expl-%j.err
 
 ## Script to align unmapped RNAseq reads to viral sequence 
 
