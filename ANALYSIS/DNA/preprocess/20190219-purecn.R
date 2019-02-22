@@ -45,6 +45,10 @@ intervals <- readBed(bed.file)
 strand(intervals) <- mcols(intervals)$name
 intervals <- intervals[,-c(1,2)]
 
+# remove MT baits (strongly recommended by PureCN author)
+intervals <- intervals[seqnames(intervals) != "MT",]
+intervals <- dropSeqlevels(intervals, "MT")
+
 # file to save intervals
 interval.file <- file.path(out.dir, "intervals.txt")
 
