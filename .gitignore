@@ -6,6 +6,7 @@
 *.out
 *.err
 *.fa
+*.vcf
 *counts.txt
 *counts.txt.summary
 *coverage.txt

@@ -71,7 +71,7 @@ if (!file.exists(interval.file)){
       reptiming = reptime,
       output.file = interval.file,
       off.target = TRUE,
-      min.target.width = 100
+      min.target.width = 100)
 
   rm(mappability)
   message("File ", interval.file, " finished.")
@@ -258,4 +258,76 @@ for (f in vcf.files){
     message("File ", this.out, " already created.")
   }
 }
+
+
+# repeat but using matched normal instead of pooled normal 
+out.dir <- paste0(out.dir, "_MN")
+plot.dir <- paste0(plot.dir, "_MN")
+
+dir.create(out.dir, showWarnings = FALSE)
+dir.create(plot.dir, showWarnings = FALSE)
+
+for (f in vcf.files){
+  this.out <- file.path(out.dir, 
+                        gsub(".vcf", 
+                             "_absolute.rds", f)) 
+
+  mutect.stats.file <- file.path(mutect.dir,                         
+                                 gsub(".vcf", 
+                                      "_call_stats.txt", f))
+
+  tcov <- file.path(out.dir, 
+                    gsub(".vcf", "_coverage_loessnorm.txt", f)) 
+
+  ncov <- file.path(out.dir, 
+                    gsub(".vcf", "_coverage_loessnorm.txt", f)) 
+  ncov <- gsub("-T-|-CL-", "-N-", ncov)
+
+  plot.file <- file.path(plot.dir, 
+                    gsub(".vcf", "_CNplots.pdf", f))
+  
+  if (!file.exists(ncov) || !file.exists(tcov)){
+    message("Coverage files missing for ", f, ". Skipping.")
+    next;
+  }
+
+
+  if (!file.exists(this.out)){  
+    message("Creating file ", this.out, "...")
+
+    pdf(plot.file, width = 10, height = 7)
+    ret <- runAbsoluteCN(normal.coverage.file = ncov, 
+                         tumor.coverage.file = tcov, 
+                         vcf.file = file.path(mutect.dir, f), 
+                         genome = "hg19", 
+                         sampleid = gsub(".vcf", "", f), 
+                         interval.file = interval.file, 
+                         normalDB = normalDB,
+                         args.filterVcf = list(snp.blacklist = snp.blacklist.file, 
+                                              stats.file = mutect.stats.file),
+                         post.optimize = FALSE) 
+    dev.off()
+    saveRDS(ret, file = this.out)
+
+    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_overview.pdf", f)), 
+      width = 6, height = 6)
+    plotAbs(ret, type="overview")
+    dev.off()
+
+    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_hist.pdf", f)), 
+      width = 6, height = 6)
+    plotAbs(ret, 1, type="hist")
+    dev.off()
+
+    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_baf.pdf", f)), 
+      width = 8, height = 8)
+    plotAbs(ret, 1, type="BAF")
+    dev.off()
+
+    message("File ", this.out, " and plots finished.")
+  }else{
+    message("File ", this.out, " already created.")
+  }
+}
+
 
