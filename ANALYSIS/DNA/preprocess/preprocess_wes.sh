@@ -35,15 +35,29 @@ sleep 1
 done
 
 
+# call mutations - no matched normal
+# use 'contemporary normal' as recommended here: https://gatkforums.broadinstitute.org/gatk/discussion/2249/recommended-syntax-for-unmatched-tumor#latest
+# using a normal sample from a different individual
+
+for id in 5473 5474; do
+echo "Tumor for ${id}"
+export NORMAL_BAM=DFCI-5368-N-01.bam
+export TUMOR_BAM=DFCI-${id}-T-01.bam
+
+sbatch -o ../slurm/${id}T.out -e ../slurm/${id}T.err call_mutations_single.sh
+sleep 1 
+
+echo "Cell line for ${id}"
+export NORMAL_BAM=DFCI-5368-N-01.bam
+export TUMOR_BAM=DFCI-${id}-C-01.bam
+
+sbatch -o ../slurm/${id}C.out -e ../slurm/${id}C.err call_mutations_single.sh
+sleep 1 
+done
+
+
 ##################### run CNVkit ############################
 sbatch -o ../slurm/${id}cnvkit.out -e ../slurm/${id}cnvkit.err run_cnvkit.sh
-
-
-##################### run vcf2maf
-# first install VEP (https://github.com/Ensembl/ensembl-vep) - install perl module DBI
-# next install vcf2maf tool with https://github.com/mskcc/vcf2maf
-
-## VEP installed - need to install vcf2maf now https://github.com/mskcc/vcf2maf
 
 
 

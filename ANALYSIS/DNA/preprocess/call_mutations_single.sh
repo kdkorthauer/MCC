@@ -14,7 +14,7 @@ module load java/1.7.0_60-fasrc01
 
 # run MuTect if output file does not already exist 
 
-if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\.vcf ]; then
+if [ ! \( -f mutect-results/$(basename $TUMOR_BAM .bam)\.vcf \) ] ; then
   java -Xmx2g -jar mutect-src/mutect/target/mutect-1.1.7.jar \
     --analysis_type MuTect \
     --reference_sequence annotation/GATK_bundle_b37/human_g1k_v37.fasta \
@@ -37,6 +37,11 @@ if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\_muts.vcf ]; then
   grep -v REJECT mutect-results/$(basename $TUMOR_BAM .bam)\.vcf  > mutect-results/$(basename $TUMOR_BAM .bam)\_muts.vcf 
 fi
 
+##################### run vcf2maf
+# first install VEP (https://github.com/Ensembl/ensembl-vep) - install perl module DBI
+# next install vcf2maf tool with https://github.com/mskcc/vcf2maf
+
+## VEP installed - need to install vcf2maf now https://github.com/mskcc/vcf2maf
 
 # convert vcf to maf
 if [ ! -f mutect-results/$(basename $TUMOR_BAM .bam)\_muts.maf ]; then
