@@ -213,13 +213,19 @@ for (f in vcf.files){
                     gsub(".vcf", "_coverage_loessnorm.txt", f)) 
 
   plot.file <- file.path(plot.dir, 
-                    gsub(".vcf", "_CNplots.pdf", f))
+                    gsub(".vcf", "_plots.pdf", f))
   
-  if (!file.exists(ncov) || !file.exists(tcov)){
-    message("Coverage files missing for ", f, ". Skipping.")
+  if (!file.exists(tcov)){
+    message("Tumor coverage file missing for ", f, ". Skipping.")
     next;
   }
 
+  if (!file.exists(ncov)){
+    message("Normal coverage file missing for ", f, ". Using process-matched")
+    ncov <- file.path(out.dir, 
+                      gsub(".vcf", "_coverage_poolnorm.txt", 
+                           "DFCI-5368-CL-01.vcf")) 
+  }
 
   if (!file.exists(this.out)){  
     message("Creating file ", this.out, "...")
@@ -238,17 +244,17 @@ for (f in vcf.files){
     dev.off()
     saveRDS(ret, file = this.out)
 
-    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_overview.pdf", f)), 
+    pdf(file.path(plot.dir, gsub(".vcf", "_plots_overview.pdf", f)), 
       width = 6, height = 6)
     plotAbs(ret, type="overview")
     dev.off()
 
-    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_hist.pdf", f)), 
+    pdf(file.path(plot.dir, gsub(".vcf", "_plots_hist.pdf", f)), 
       width = 6, height = 6)
     plotAbs(ret, 1, type="hist")
     dev.off()
 
-    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_baf.pdf", f)), 
+    pdf(file.path(plot.dir, gsub(".vcf", "_plots_baf.pdf", f)), 
       width = 8, height = 8)
     plotAbs(ret, 1, type="BAF")
     dev.off()
@@ -261,16 +267,16 @@ for (f in vcf.files){
 
 
 # repeat but using matched normal instead of pooled normal 
-out.dir <- paste0(out.dir, "_MN")
-plot.dir <- paste0(plot.dir, "_MN")
+out.dir.MN <- paste0(out.dir, "_MN")
+plot.dir <- file.path(out.dir.MN, "plots")
 
-dir.create(out.dir, showWarnings = FALSE)
+dir.create(out.dir.MN, showWarnings = FALSE)
 dir.create(plot.dir, showWarnings = FALSE)
 
 for (f in vcf.files){
   this.out <- file.path(out.dir, 
                         gsub(".vcf", 
-                             "_absolute.rds", f)) 
+                             "_absolute_MN.rds", f)) 
 
   mutect.stats.file <- file.path(mutect.dir,                         
                                  gsub(".vcf", 
@@ -284,13 +290,19 @@ for (f in vcf.files){
   ncov <- gsub("-T-|-CL-", "-N-", ncov)
 
   plot.file <- file.path(plot.dir, 
-                    gsub(".vcf", "_CNplots.pdf", f))
+                    gsub(".vcf", "_plots_CN.pdf", f))
   
-  if (!file.exists(ncov) || !file.exists(tcov)){
-    message("Coverage files missing for ", f, ". Skipping.")
+  if (!file.exists(tcov)){
+    message("Tumor coverage file missing for ", f, ". Skipping.")
     next;
   }
 
+  if (!file.exists(ncov)){
+    message("Normal coverage file missing for ", f, ". Using process-matched")
+    ncov <- file.path(out.dir, 
+                    gsub(".vcf", "_coverage_loessnorm.txt", "DFCI-5368-CL-01.vcf")) 
+    ncov <- gsub("-T-|-CL-", "-N-", ncov) 
+  }
 
   if (!file.exists(this.out)){  
     message("Creating file ", this.out, "...")
@@ -309,17 +321,17 @@ for (f in vcf.files){
     dev.off()
     saveRDS(ret, file = this.out)
 
-    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_overview.pdf", f)), 
+    pdf(file.path(plot.dir, gsub(".vcf", "_plots_overview_MN.pdf", f)), 
       width = 6, height = 6)
     plotAbs(ret, type="overview")
     dev.off()
 
-    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_hist.pdf", f)), 
+    pdf(file.path(plot.dir, gsub(".vcf", "_plots_hist_MN.pdf", f)), 
       width = 6, height = 6)
     plotAbs(ret, 1, type="hist")
     dev.off()
 
-    pdf(file.path(plot.dir, gsub(".vcf", "_CNplots_baf.pdf", f)), 
+    pdf(file.path(plot.dir, gsub(".vcf", "_plots_baf_MN.pdf", f)), 
       width = 8, height = 8)
     plotAbs(ret, 1, type="BAF")
     dev.off()
