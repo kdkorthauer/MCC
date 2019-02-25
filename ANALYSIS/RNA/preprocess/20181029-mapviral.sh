@@ -24,6 +24,7 @@ cd ..
 
 # pull out unmapped reads from original BAMs
 module load samtools
+module load bedtools2
 
 for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*1.bam; do
     [ -f "$i" ] || break
@@ -45,6 +46,28 @@ for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*unmapped.bam; do
       bwa samse ref/mcc.fa $pref/$samp\_virus.sai $i | tee >(samtools view - -Sb -f 0x04 -o $pref/$samp\_virusunmap.bam) | samtools view - -Sb -F 0x04 -o $pref/$samp\_virusmap.bam;
     fi
 done
+
+# bam to bedGraph
+# 1. sort bam
+# 2. index bam 
+# 3. convert to bedGraph
+
+for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
+    samp=$(basename $i)
+    pref=$(dirname $i)
+    if [[ ! -e $pref/$samp\.sorted.bam ]]; then
+      samtools sort $pref/$samp > $pref/$samp\.sorted.bam
+    fi 
+
+    if [[ ! -e $pref/$samp\.sorted.bam.bai ]]; then
+      samtools index $pref/$samp\.sorted.bam 
+    fi 
+
+    if [[ ! -e $pref/$samp\.sorted.bam.bedGraph ]]; then
+      bedtools genomecov -ibam $pref/$samp\.sorted.bam -bg > $pref/$samp\.sorted.bam.bedGraph
+    fi 
+done
+
 
 # query which samples had reads aligned to the mcc polyomav
 for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
