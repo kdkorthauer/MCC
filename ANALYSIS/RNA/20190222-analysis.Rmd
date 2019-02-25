@@ -1,5 +1,5 @@
 ---
-title: "MCC RNAseq - compare tumor and cell line"
+title: "MCC RNAseq - variation by origin and viral status"
 author: "Keegan Korthauer"
 output: 
     html_document:
@@ -43,6 +43,7 @@ library(org.Hs.eg.db)
 library(ggrepel)
 library(Gviz)
 library(rtracklayer)
+library(RUVSeq)
 
 register(MulticoreParam(10))
 
@@ -116,8 +117,9 @@ x <- match(as.numeric(gsub("DFCI_", "", colDat$dfci.id)), id.map$id1)
 colDat$mcc.id <- as.factor(id.map$id2[x])
 
 viralneg <- c("286", "350", "290", "282")
-colDat$virus <- "+"
-colDat$virus[colDat$mcc.id %in% viralneg] <- "-"
+colDat$virus <- "pos"
+colDat$virus[colDat$mcc.id %in% viralneg] <- "neg"
+colDat$virus <- as.factor(colDat$virus)
 ```
 
 Finally, we'll construct a DESeq dataset.
@@ -138,11 +140,15 @@ less than 1. These are considered not expressed.
 filt <- which(rowMeans(counts(dat)) < 1)
 dat <- dat[ -filt, ]
 ```
+
+## Size factor
+
 Next we'll estimate the library size factors.
 
 ```{r}
 dat <- estimateSizeFactors(dat)
 ```
+
 Here are boxplots of raw and normalized counts:
 
 ```{r}
@@ -150,6 +156,7 @@ Here are boxplots of raw and normalized counts:
 data.frame(log(counts(dat)+1)) %>% gather("sampleName", "count", 1:ncol(dat)) %>%
  left_join(data.frame(colData(dat)), by = "sampleName") %>%
  ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
  geom_boxplot() +
  ggtitle("Raw counts") +
  ylab("log(raw count + 1)")
@@ -160,10 +167,67 @@ data.frame(log(counts(dat, normalize = TRUE)+1)) %>%
  gather("sampleName", "count", 1:ncol(dat)) %>%
  left_join(data.frame(colData(dat)), by = "sampleName") %>%
  ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
  geom_boxplot() +
  ggtitle("Normalized counts") +
  ylab("log(normalized count + 1)")
 ggsave(file.path("plots", "normcounts_boxplot.pdf"), width = 7, height = 3)
+```
+
+## Housekeeping genes
+
+As an alternative to DEseq size factor normalization, we'll also try out normalizing
+using a set of housekeeping genes, as the difference in the number of expressed genes
+between tumor and cell lines is quite large and could be a confounding factor. First 
+we need to map these
+gene symbols to ENSEMBL ids. We'll do this using the Bioconductor package 
+org.Hs.eg.db
+
+```{r}
+map <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat), "\\."), 
+				                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat), "\\."), function(x) x[1])),
+           map$ENSEMBL)
+rowData(dat)$symbol <- map$SYMBOL[x]   
+```
+
+Next we donwload the list of housekeeping genes.
+
+```{r}
+hkgenes <- read_tsv("https://www.tau.ac.il/~elieis/HKG/HK_genes.txt", 
+                    col_names = c("symbol", "id"))
+
+rowData(dat)$housekeeping <- rowData(dat)$symbol %in% hkgenes$symbol
+
+# plot of raw expression of hk genes
+data.frame(log(counts(dat)+1)) %>%
+ filter(rowData(dat)$housekeeping) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
+ geom_boxplot() +
+ ggtitle("Housekeeping genes") +
+ ylab("log(raw count + 1)")
+```
+
+Use these genes to normalize:
+
+```{r}
+set1 <- RUVg(counts(dat), rowData(dat)$housekeeping, k=1)
+colData(dat)$W = as.vector(set1$W)
+
+data.frame(log(set1$normalizedCounts+1)) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
+ geom_boxplot() +
+ ggtitle("Housekeeping genes") +
+ ylab("log(normalized count + 1)")
 ```
 
 # Unsupervised clustering
@@ -201,8 +265,10 @@ cols2 <-  colorRampPalette( rev(brewer.pal(length(unique(colData(dat)$mcc.id)),
                                            "Set3")) )(length(unique(colData(dat)$mcc.id)))
 names(cols2) <- unique(colData(dat)$mcc.id)
 ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat)[, c("type")],
+                                              Virus = colData(dat)[, c("virus")],
                                               ID = colData(dat)[, c("mcc.id")]),
                               col = list(Type = c(Cell_line="lightgrey", Tumor="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
                                          ID = cols2))
 ht = Heatmap(mat, name = "Distance\n(log2 Norm)", 
              top_annotation = ha_column, col = colors,
@@ -314,7 +380,7 @@ Instead of 100 highly variable genes, we also show results for 500. This time,
 also exclude the virus negative samples.
 
 ```{r heatmap-expr-var-500-vs-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
-dat_p <- dat[, c(which(colData(dat)$virus == "+"))]
+dat_p <- dat[, c(which(colData(dat)$virus == "pos"))]
 vsd_p = vst(dat_p)
 
 cols2_p <-  colorRampPalette( rev(brewer.pal(length(unique(colData(dat_p)$mcc.id)), 
@@ -341,7 +407,7 @@ draw(ht)
 And now the same for viral negative samples:
         
 ```{r heatmap-expr-var-500-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
-dat_n <- dat[, c(which(colData(dat)$virus %in% "-"))]
+dat_n <- dat[, c(which(colData(dat)$virus %in% "neg"))]
 vsd_n = vst(dat_n)
 
 cols2_n <-  colorRampPalette( rev(brewer.pal(length(unique(colData(dat_n)$mcc.id)), 
@@ -437,20 +503,7 @@ goi <- read_tsv("../genes_of_interest.txt", col_names = FALSE)
 colnames(goi) <- c("symbol", "description")
 ```
 
-Next we need to map these
-gene symbols to ENSEMBL ids. We'll do this using the Bioconductor package 
-org.Hs.eg.db
-
 ```{r}
-map <- select(org.Hs.eg.db,
-              keys = unlist(lapply(strsplit(rownames(dat), "\\."), 
-				                       function(x) x[1])),
-              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
-              keytype="ENSEMBL")
-x <- match(unlist(lapply(strsplit(rownames(dat), "\\."), function(x) x[1])),
-           map$ENSEMBL)
-rowData(dat)$symbol <- map$SYMBOL[x]    
-
 # add description to rowdata
 x <- which(rowData(dat)$symbol %in% goi$symbol)
 
@@ -458,7 +511,6 @@ rowData(dat)$description <- NA
 for(g in x){
   rowData(dat)$description[g] <- goi$description[goi$symbol == rowData(dat)$symbol[g]]
 }
-
 ```
 
 Next, we'll create a heatmap of these genes of interest, first for log2 normalized
@@ -546,6 +598,7 @@ if(file.exists(viralquant_file)){
  ggsave(file.path("plots", "viralRNAcounts.pdf"), width = 5, height = 3.5)
 }
 ```
+
 ## Visualize alignment of MCC RNA
 
 Here we use the `Gviz` package to visualize the alignment of the reads that map to the MCC viral genome. 
@@ -562,17 +615,33 @@ nms <- list.files(path = "../../DATA/RNA/", pattern = ".bedGraph")
 nms <- sapply(strsplit(nms, "-01_unmapped_"), function(x) x[1])
 names(track) <- nms
 
+viral <- unique(viral)
+viral$id <- gsub("\\.", "-", viral$sampleName)
+
+id.map <- colData(dat) %>% 
+           data.frame() %>%
+           dplyr::select(sampleName, mcc.id) %>%
+           mutate(id = gsub("\\.", "-", sampleName))
+x <- match(names(track), id.map$id)
+id.map <- id.map %>%
+  mutate(mcc.id.type = paste0(mcc.id, "-", substr(id.map$sampleName, 11,11)))
+names(track) <- id.map$mcc.id.type[x]
+x <- match(id.map$id, viral$id)
+id.map$virus_count <- viral$normcount[x]
+
+
 options(ucscChromosomeNames=FALSE)
 for (i in seq_along(coverageTracks)){
   covlist[[i]] <- import.bedGraph(coverageTracks[i])
   strand(covlist[[i]]) <- "+"
-  sumcov <- sum(score(covlist[[i]]))
-  score(covlist[[i]]) <- score(covlist[[i]])/sumcov*1e5
+  normfactor <- id.map$virus_count[id.map$mcc.id.type == names(track)[i]]
+  score(covlist[[i]]) <- score(covlist[[i]])/normfactor*1e3
   if(length(covlist[[i]]) > 0)
     track[[i]] <- DataTrack(covlist[[i]], name = names(track)[i])
 }
 
 track[[i+1]] <- GenomeAxisTrack(name = "MCC")
+names(track)[length(track)] <- "MCC"
 whichnull <- which(sapply(track, is.null))
 track <- track[-whichnull]
 covlist <- covlist[-whichnull]
@@ -587,7 +656,7 @@ Here we use the signal track objects from the previous section to find regions w
 ```{r}
 peaks <- covlist
 for (i in seq_along(covlist)){
-  peaks[[i]] <- reduce(covlist[[i]][score(covlist[[i]]) > 100])
+  peaks[[i]] <- reduce(covlist[[i]][score(covlist[[i]]) > 80])
   if (i == 1)
     int <- peaks[[i]]
   if (i > 1)
@@ -662,7 +731,7 @@ tumor samples and cell lines. We'll exclude the 286 sample as it appears to be
 quite an outlier.
 
 ```{r}
-dat <- dat[,-which(colData(dat)$mcc.id == "286")]
+design(dat) <- ~ W + virus + type
 dat <- DESeq(dat)
 
 res <- results(dat)
@@ -681,11 +750,12 @@ data.frame(res) %>%
 ggsave(file.path("plots", "volcano_de01.pdf"), width = 5, height = 4)
 ```
 
-There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01. Here is a 
-heatmap of those genes, first for log2 normalized counts:
+There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01. 
+`r sum(res$padj < 0.01 & abs(res$log2FoldChange) > 2, na.rm = TRUE)` also have log2 fold change of at least 2. 
+Here is a heatmap of those genes, first for log2 normalized counts:
 
 ```{r heatmap-DE-l2n-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
-mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & !is.na(res$padj), ] + 1)
+mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & abs(res$log2FoldChange) > 2 & !is.na(res$padj), ] + 1)
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
 ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
@@ -700,7 +770,7 @@ draw(ht)
 Next for vs-transformed counts.
 
 ```{r heatmap-DE-vs-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
-mat <- assay(vsd)[res$padj < 0.01 & !is.na(res$padj), ]
+mat <- assay(vsd)[res$padj < 0.01 & abs(res$log2FoldChange) > 2 & !is.na(res$padj), ]
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
 ht = Heatmap(mat, name = "VS counts", 
@@ -739,8 +809,9 @@ stats <- res$stat
 names(stats) <- unlist(lapply(strsplit(rownames(res), "\\."), 
 				                       function(x) x[1]))
 stats <- stats[!is.na(stats)]
+overwrite <- TRUE
 
-if (!file.exists(gsea_file)) {
+if (!file.exists(gsea_file) || overwrite) {
   goRes <- fgsea(goSets, 
                   stats, 
                   nperm=10000, 
@@ -796,7 +867,6 @@ df <- data.frame(res) %>%
   mutate(DE.01 = padj < 0.01)
   
 knitr::kable((df %>% filter(!is.na(description)) %>% arrange(-pvalue))[,-c(1,3,4,5)])
-
 ```
 
 `r sum(df$DE.01 & !is.na(df$description))` out of 
@@ -846,8 +916,7 @@ viral positive and viral negative samples. We'll include cell line / tumor
 origin as a covariate.
 
 ```{r}
-colData(dat)$virus <- factor(ifelse(colData(dat)$virus == "+", "pos", "neg"))
-design(dat) <- ~ type + virus
+design(dat) <- ~ W + type + virus
 dat <- DESeq(dat)
 
 res <- results(dat)
@@ -866,11 +935,13 @@ data.frame(res) %>%
 ggsave(file.path("plots", "volcano_de01_viral.pdf"), width = 5, height = 4)
 ```
 
-There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01. Here is a 
+There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01. 
+`r sum(res$padj < 0.01 & abs(res$log2FoldChange) > 2, na.rm = TRUE)` also have log2 fold change of at least 2. 
+Here is a 
 heatmap of those genes, first for log2 normalized counts:
 
 ```{r heatmap-DE-l2n-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
-mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & !is.na(res$padj), ] + 1)
+mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ] + 1)
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
 ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
@@ -885,7 +956,7 @@ draw(ht)
 Next for vs-transformed counts.
 
 ```{r heatmap-DE-vs-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
-mat <- assay(vsd)[res$padj < 0.01 & !is.na(res$padj), ]
+mat <- assay(vsd)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ]
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
 ht = Heatmap(mat, name = "VS counts", 
@@ -925,7 +996,7 @@ names(stats) <- unlist(lapply(strsplit(rownames(res), "\\."),
 				                       function(x) x[1]))
 stats <- stats[!is.na(stats)]
 
-if (!file.exists(gsea_file)) {
+if (!file.exists(gsea_file) || overwrite) {
   goRes <- fgsea(goSets, 
                   stats, 
                   nperm=10000, 
