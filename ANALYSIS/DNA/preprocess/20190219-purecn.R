@@ -274,7 +274,7 @@ dir.create(out.dir.MN, showWarnings = FALSE)
 dir.create(plot.dir, showWarnings = FALSE)
 
 for (f in vcf.files){
-  this.out <- file.path(out.dir, 
+  this.out <- file.path(out.dir.MN, 
                         gsub(".vcf", 
                              "_absolute_MN.rds", f)) 
 
@@ -287,7 +287,7 @@ for (f in vcf.files){
 
   ncov <- file.path(out.dir, 
                     gsub(".vcf", "_coverage_loessnorm.txt", f)) 
-  ncov <- gsub("-T-|-CL-", "-N-", ncov)
+  ncov <- gsub("-T-|-CL-|-C-", "-N-", ncov)
 
   plot.file <- file.path(plot.dir, 
                     gsub(".vcf", "_plots_CN.pdf", f))
@@ -301,7 +301,7 @@ for (f in vcf.files){
     message("Normal coverage file missing for ", f, ". Using process-matched")
     ncov <- file.path(out.dir, 
                     gsub(".vcf", "_coverage_loessnorm.txt", "DFCI-5368-CL-01.vcf")) 
-    ncov <- gsub("-T-|-CL-", "-N-", ncov) 
+    ncov <- gsub("-T-|-CL-|-C-", "-N-", ncov) 
   }
 
   if (!file.exists(this.out)){  
