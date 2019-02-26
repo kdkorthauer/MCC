@@ -44,6 +44,8 @@ library(ggrepel)
 library(Gviz)
 library(rtracklayer)
 library(RUVSeq)
+library(cowplot)
+library(ggridges)
 
 register(MulticoreParam(10))
 
@@ -133,6 +135,44 @@ dat <- DESeqDataSetFromMatrix(countData = exp,
 
 # Filtering and normalization
 
+Examine lowly expressed / undetected genes.
+
+```{r}
+dat <- estimateSizeFactors(dat)
+df <- data.frame(Zero = colSums(counts(dat) == 0)/nrow(dat),
+                 Low = colSums(counts(dat) < 5)/nrow(dat),
+                 Libsize = sizeFactors(dat))
+df <- df %>% mutate(sampleName = rownames(df)) %>%
+  gather(level, proportion, -sampleName) %>%
+  mutate(type = factor(ifelse(grepl("T", sampleName), "Tumor", "Cell Line")))
+
+p1 <- df %>% filter(level != "Libsize") %>%
+  ggplot(aes(x = type, y = proportion, fill = type)) +
+    facet_grid( ~ level) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.05) +
+    theme(legend.position = "none") +
+    ggtitle("Proportion of lowly expressed genes")
+
+p2 <- df %>% filter(level == "Libsize") %>%
+  ggplot(aes(x = type, y = proportion, fill = type)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.05) +
+    ggtitle("Library Size") +
+    ylab("Library size")
+
+plot_grid(p1, p2, rel_widths = c(0.7,0.6), nrow = 1)
+
+# t-test for difference between tumor and cell line
+t.test(df$proportion[df$level == "Zero"] ~ df$type[df$level ==  "Zero"])
+t.test(df$proportion[df$level == "Low"] ~ df$type[df$level ==  "Low"])
+
+# excluding 5370 (286) outlier sample
+df <- filter(df, sampleName != "DFCI.5370.T")
+t.test(df$proportion[df$level == "Zero"] ~ df$type[df$level ==  "Zero"])
+t.test(df$proportion[df$level == "Low"] ~ df$type[df$level ==  "Low"])
+```
+
 First we'll remove features (genes) that have mean count across all samples 
 less than 1. These are considered not expressed.
 
@@ -172,6 +212,30 @@ data.frame(log(counts(dat, normalize = TRUE)+1)) %>%
  ggtitle("Normalized counts") +
  ylab("log(normalized count + 1)")
 ggsave(file.path("plots", "normcounts_boxplot.pdf"), width = 7, height = 3)
+```
+
+And ridge plots showing the same thing:
+
+```{r}
+# raw
+data.frame(log(counts(dat)+1)) %>% gather("sampleName", "count", 1:ncol(dat)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(y = mcc.id, x = count, group = sampleName, fill = type)) +
+ facet_wrap( ~ virus, scales = "free_y") +  
+ geom_density_ridges(scale = 0.9, alpha = 0.4)  +
+ ggtitle("Raw counts") +
+ xlab("log(raw count + 1)")
+ggsave(file.path("plots", "rawcounts_ridgeplot.pdf"), width = 7, height = 3)
+
+# normalized
+data.frame(log(counts(dat, normalized=TRUE)+1)) %>% gather("sampleName", "count", 1:ncol(dat)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(y = mcc.id, x = count, group = sampleName, fill = type)) +
+ facet_wrap( ~ virus, scales = "free_y") +  
+ geom_density_ridges(scale = 0.9, alpha = 0.4)  +
+ ggtitle("Normalized counts") +
+ xlab("log(normalized count + 1)")
+ggsave(file.path("plots", "normcounts_ridgeplot.pdf"), width = 7, height = 3)
 ```
 
 ## Housekeeping genes
@@ -553,6 +617,7 @@ ht = Heatmap(mat, name = "VS counts",
              col = ecolors)
 draw(ht + ha_row)
 ```
+
 # MCC Polyomavirus
 
 Here we quantify the presence of Merkel Cell Polyomavirus RNA, as well as visualize where it is located within the MCC genome. In addition, we are interested in identifying specific viral sequences that are highly expressed througout the virus positive samples.
@@ -838,7 +903,7 @@ plotGseaTable(goSets[topPathways], stats, goRes,
 ```
 
 The top categories that DE genes between Tumor and cell line are overrepresented
-are highly related to the immune response. Angiogenesis also seems relevant.
+are highly related to the immune response. 
 
 Since many of these pathways are related and overlapping, we also try collapsing
 into independent pathways:
@@ -1022,8 +1087,8 @@ plotGseaTable(goSets[topPathways], stats, goRes,
               colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
 ```
 
-The top categories that DE genes between Tumor and cell line are overrepresented
-are highly related to the immune response. Angiogenesis also seems relevant.
+The top categories that DE genes between viral positive and viral negative are overrepresented
+are highly related to the immune response. 
 
 Since many of these pathways are related and overlapping, we also try collapsing
 into independent pathways:
