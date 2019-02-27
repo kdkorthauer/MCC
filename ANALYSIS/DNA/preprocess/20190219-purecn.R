@@ -22,10 +22,10 @@ bed.file <- file.path(annot.dir,
 
 # get mappability file: 
 mappability.file <- file.path(annot.dir,
-	                          "wgEncodeCrgMapabilityAlign36mer.bigWig")
+	                          "wgEncodeCrgMapabilityAlign100mer.bigWig")
 
 if(!file.exists(mappability.file)){
-  download.file("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeMapability/wgEncodeCrgMapabilityAlign36mer.bigWig",
+  download.file("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeMapability/wgEncodeCrgMapabilityAlign100mer.bigWig",
 	              destfile = mappability.file)
 }
 
@@ -155,7 +155,8 @@ for (f in c(t.coverage.files, cl.coverage.files)){
   if (!file.exists(this.out)){  
     message("Creating file ", this.out, "...")
 
-    pool <- calculateTangentNormal(file.path(out.dir, f), normalDB)
+    pool <- calculateTangentNormal(file.path(out.dir, f), normalDB,
+                                   ignore.sex = TRUE)
     PureCN:::.writeCoverage(pool, output.file = this.out) # save to file
 
     message("File ", this.out, " finished.")
@@ -264,82 +265,4 @@ for (f in vcf.files){
     message("File ", this.out, " already created.")
   }
 }
-
-
-# repeat but using matched normal instead of pooled normal 
-out.dir.MN <- paste0(out.dir, "_MN")
-plot.dir <- file.path(out.dir.MN, "plots")
-
-dir.create(out.dir.MN, showWarnings = FALSE)
-dir.create(plot.dir, showWarnings = FALSE)
-
-for (f in vcf.files){
-  this.out <- file.path(out.dir.MN, 
-                        gsub(".vcf", 
-                             "_absolute_MN.rds", f)) 
-
-  mutect.stats.file <- file.path(mutect.dir,                         
-                                 gsub(".vcf", 
-                                      "_call_stats.txt", f))
-
-  tcov <- file.path(out.dir, 
-                    gsub(".vcf", "_coverage_loessnorm.txt", f)) 
-
-  ncov <- file.path(out.dir, 
-                    gsub(".vcf", "_coverage_loessnorm.txt", f)) 
-  ncov <- gsub("-T-|-CL-|-C-", "-N-", ncov)
-
-  plot.file <- file.path(plot.dir, 
-                    gsub(".vcf", "_plots_CN.pdf", f))
-  
-  if (!file.exists(tcov)){
-    message("Tumor coverage file missing for ", f, ". Skipping.")
-    next;
-  }
-
-  if (!file.exists(ncov)){
-    message("Normal coverage file missing for ", f, ". Using process-matched")
-    ncov <- file.path(out.dir, 
-                    gsub(".vcf", "_coverage_loessnorm.txt", "DFCI-5368-CL-01.vcf")) 
-    ncov <- gsub("-T-|-CL-|-C-", "-N-", ncov) 
-  }
-
-  if (!file.exists(this.out)){  
-    message("Creating file ", this.out, "...")
-
-    pdf(plot.file, width = 10, height = 7)
-    ret <- runAbsoluteCN(normal.coverage.file = ncov, 
-                         tumor.coverage.file = tcov, 
-                         vcf.file = file.path(mutect.dir, f), 
-                         genome = "hg19", 
-                         sampleid = gsub(".vcf", "", f), 
-                         interval.file = interval.file, 
-                         normalDB = normalDB,
-                         args.filterVcf = list(snp.blacklist = snp.blacklist.file, 
-                                              stats.file = mutect.stats.file),
-                         post.optimize = FALSE) 
-    dev.off()
-    saveRDS(ret, file = this.out)
-
-    pdf(file.path(plot.dir, gsub(".vcf", "_plots_overview_MN.pdf", f)), 
-      width = 6, height = 6)
-    plotAbs(ret, type="overview")
-    dev.off()
-
-    pdf(file.path(plot.dir, gsub(".vcf", "_plots_hist_MN.pdf", f)), 
-      width = 6, height = 6)
-    plotAbs(ret, 1, type="hist")
-    dev.off()
-
-    pdf(file.path(plot.dir, gsub(".vcf", "_plots_baf_MN.pdf", f)), 
-      width = 8, height = 8)
-    plotAbs(ret, 1, type="BAF")
-    dev.off()
-
-    message("File ", this.out, " and plots finished.")
-  }else{
-    message("File ", this.out, " already created.")
-  }
-}
-
 
