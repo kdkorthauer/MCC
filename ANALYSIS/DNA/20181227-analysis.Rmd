@@ -8,6 +8,8 @@ output:
         highlight: tango
         number_sections: true
         code_folding: hide
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -29,6 +31,7 @@ library(ggplot2)
 theme_set(theme_bw())
 library(RColorBrewer) 
 library(maftools)
+library(tidyverse)
 
 mafdir <- "../../PREPROCESS/DNA/mutect-results/"
 ```
@@ -60,11 +63,16 @@ contain one observation per cell, so we'll have to manually enter the informatio
 # 5478 -> 358
 
 maf@clinical.data$patient <- ifelse(grepl("5367", maf@clinical.data$Tumor_Sample_Barcode), "277",
-                          ifelse(grepl("5368", maf@clinical.data$Tumor_Sample_Barcode), "314",
-                          ifelse(grepl("5369", maf@clinical.data$Tumor_Sample_Barcode), "310",
-                          NA)))
-maf@clinical.data$type <- ifelse(grepl("CL", maf@clinical.data$Tumor_Sample_Barcode), "Cell Line",
+                               ifelse(grepl("5368", maf@clinical.data$Tumor_Sample_Barcode), "314",
+                                 ifelse(grepl("5369", maf@clinical.data$Tumor_Sample_Barcode), "301",
+                                   ifelse(grepl("5473", maf@clinical.data$Tumor_Sample_Barcode), "320",
+                                     ifelse(grepl("5474", maf@clinical.data$Tumor_Sample_Barcode), "367",
+                               NA)))))
+maf@clinical.data$type <- ifelse(grepl("-CL-|-C-", maf@clinical.data$Tumor_Sample_Barcode), "Cell Line",
                           "Tumor")
+
+maf@clinical.data
+getSampleSummary(maf)
 ```
 
 # Summary plots
@@ -167,16 +175,44 @@ for (s in unique(clusters$clusterMeans$Tumor_Sample_Barcode)){
 # Co-mut plots
 
 ```{r comut, fig.height = 8.5, fig.width = 6, fig.path="plots/", dev="png"}
-fabcolors = RColorBrewer::brewer.pal(n = 4,name = 'Set1')[c(1,2,4)]
-names(fabcolors) = c("277", "314", "310")
+fabcolors = RColorBrewer::brewer.pal(n = 5,name = 'Set1')
+names(fabcolors) = c("320", "367", "277", "314", "301")
 fabcolors = list(patient = fabcolors)
 
 oncoplot(maf = maf, top = 50, fontSize = 9, 
          clinicalFeatures = c('type', "patient"),
          annotationColor = fabcolors, 
-         sampleOrder = c("DFCI-5367-CL-01", "DFCI-5367-T-01",
+         sampleOrder = c("DFCI-5473-C-01", "DFCI-5473-T-01",
+                         "DFCI-5474-C-01", "DFCI-5474-T-01",
+                         "DFCI-5367-CL-01", "DFCI-5367-T-01",
                          "DFCI-5368-CL-01", "DFCI-5368-T-01",
                          "DFCI-5369-CL-01", "DFCI-5369-T-01"))
+```
+
+# clustering
+
+Need to construct gene by sample matrix from the tidy matrix in `maf@data`.
+
+```{r}
+tidy_maf <- maf@data
+
+tidy_maf <- select(tidy_maf, sample_id, Hugo_Symbol) %>%
+  group_by(sample_id, Hugo_Symbol) %>%
+  summarize(muts = n())
+
+spread(data, key, value, fill = NA, convert = FALSE)
+
+mat_maf <- spread(tidy_maf, sample_id, muts, 0) %>%
+  column_to_rownames(var = "Hugo_Symbol")
+
+head(mat_maf)
+```
+
+Now we're ready to compute distances.
+
+```{r}
+d <- dist(t(mat_maf), method = "binary")
+plot(hclust(d))
 ```
 
 # Session Information
