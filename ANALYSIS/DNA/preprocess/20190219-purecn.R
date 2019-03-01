@@ -1,4 +1,4 @@
-library(PureCN) # use version 1.13.10 or higher
+library(PureCN) # use version 1.13.19 or higher
 library(genomation)
 library(BiocParallel)
 
@@ -228,6 +228,17 @@ for (f in vcf.files){
                            "DFCI-5368-CL-01.vcf")) 
   }
 
+ 
+  if (grepl("-C-|-CL-", this.out)){
+    tp=seq(0.9, 0.99,by=0.01)
+    message("Cell line sample; Restricting purity to [",
+            min(tp), ",", max(tp), "]")
+  }else{
+    tp=seq(0.3, 0.98, by = 0.01)
+    message("Tumor sample; Restricting purity to [",
+            min(tp), ",", max(tp), "]")
+  }
+
   if (!file.exists(this.out)){  
     message("Creating file ", this.out, "...")
 
@@ -241,7 +252,8 @@ for (f in vcf.files){
                          normalDB = normalDB,
                          args.filterVcf = list(snp.blacklist = snp.blacklist.file, 
                                               stats.file = mutect.stats.file),
-                         post.optimize = FALSE) 
+                         post.optimize = FALSE,
+                         test.purity = tp) 
     dev.off()
     saveRDS(ret, file = this.out)
 
