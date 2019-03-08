@@ -7,33 +7,83 @@
 #SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
-RESDIR=mutect-results
+RESDIR=mutect2-results
 mkdir -p $RESDIR
 
+module load gatk/4.0.2.1-fasrc01
+module load jdk/1.8.0_45-fasrc01
+module load samtools
+  # gatk Mutect2 --help
 
-module load centos6/0.0.1-fasrc01
-module load java/1.7.0_60-fasrc01
 
-# run MuTect if output file does not already exist 
+################
+# build PoN
+################
 
-if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \) ] ; then
-  java -Xmx2g -jar mutect-src/mutect/target/mutect-1.1.7.jar \
-    --analysis_type MuTect \
-    --reference_sequence annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-    --dbsnp annotation/GATK_bundle_b37/dbsnp_138.b37.vcf \
-    --input_file:normal ../../DATA/DNA/$NORMAL_BAM \
-    --input_file:tumor ../../DATA/DNA/$TUMOR_BAM \
-    --out $RESDIR/$(basename $TUMOR_BAM .bam)\_call_stats.txt \
-    --coverage_file $RESDIR/$(basename $TUMOR_BAM .bam)\_coverage.wig.txt \
-    -vcf $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf 
+
+# account for different N GT column name in 5369
+if echo "$NORMAL_BAM" | grep -q "5369";then
+  NORMAL_BAM2=${NORMAL_BAM/DFCI-5/DFCI5};
+else
+  NORMAL_BAM2=$NORMAL_BAM;
 fi
 
-# for testing short regions use, e.g.
-# --intervals 1:10000000-10100000 \
+# create somatic panel of normals
+if [ \( -f $RESDIR/DFCI-5367-N-01.vcf \) ] ; then
+if [ \( -f $RESDIR/DFCI-5368-N-01.vcf \) ] ; then
+if [ \( -f $RESDIR/DFCI-5369-N-01.vcf \) ] ; then
+if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
+ gatk CreateSomaticPanelOfNormals \
+   -vcfs $RESDIR/DFCI-5367-N-01.vcf \
+   -vcfs $RESDIR/DFCI-5368-N-01.vcf \
+   -vcfs $RESDIR/DFCI-5368-N-01.vcf \
+   -O $RESDIR/pon.vcf.gz
+fi
+fi
+fi
+fi
 
-# on output, extract PASS mutations in separate vcf file
-if [ ! -f $RESDIR/$(basename $TUMOR_BAM .bam)\_muts.vcf ]; then
-  grep -v REJECT $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf  > $RESDIR/$(basename $TUMOR_BAM .bam)\_muts.vcf 
+# run MuTect if output file does not already exist 
+if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \) ] ; then
+if [ \( -f $RESDIR/pon.vcf.gz \) ] ; then
+
+if [ ! -z "$NORMAL_BAM" ]; then
+  # matched normal
+  gatk Mutect2 \
+     -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
+     -I ../../DATA/DNA/$TUMOR_BAM \
+     -I ../../DATA/DNA/$NORMAL_BAM \
+     -tumor ${TUMOR_BAM%.*} \
+     -normal ${NORMAL_BAM2%.*} \
+     --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
+     --af-of-alleles-not-in-resource 0.00001 \
+     --panel-of-normals $RESDIR/pon.vcf.gz \
+     -O $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf
+else
+  # no matched normal
+  gatk Mutect2 \
+     -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
+     -I ../../DATA/DNA/$TUMOR_BAM \
+     -tumor ${TUMOR_BAM%.*} \
+     --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
+     --af-of-alleles-not-in-resource 0.00000005 \
+     --panel-of-normals $RESDIR/pon.vcf.gz \
+     -O $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf
+fi
+
+fi
+fi
+
+# filter variants
+if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf \) ] ; then
+  gatk FilterMutectCalls \
+    -V $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \
+    -O $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf
+fi
+
+# extract passing variants
+if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)_pass\.vcf \) ] ; then
+   grep "#\|PASS" $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf > $RESDIR/$(basename $TUMOR_BAM .bam)_pass\.vcf
 fi
 
 
@@ -43,21 +93,13 @@ fi
 
 ## VEP installed - need to install vcf2maf now https://github.com/mskcc/vcf2maf
 
-# account for different N GT column name in 5369
-TVAR=$(grep DFCI5 $RESDIR/$(basename $TUMOR_BAM .bam)\_muts.vcf);
-
-if [ ! -z "$TVAR" ]; then
-  NORMAL_BAM2=${NORMAL_BAM/DFCI-5/DFCI5};
-else
-  NORMAL_BAM2=$NORMAL_BAM;
-fi
 
 # convert vcf to maf
-if [ ! -f $RESDIR/$(basename $TUMOR_BAM .bam)\_muts.maf ]; then
+if [ ! -f $RESDIR/$(basename $TUMOR_BAM .bam)\.maf ]; then
   module load tabix
   perl mskcc-vcf2maf-*/vcf2maf.pl \
-    --input-vcf $RESDIR/$(basename $TUMOR_BAM .bam)\_muts.vcf \
-    --output-maf $RESDIR/$(basename $TUMOR_BAM .bam)\_muts.maf \
+    --input-vcf $RESDIR/$(basename $TUMOR_BAM .bam)\_pass.vcf \
+    --output-maf $RESDIR/$(basename $TUMOR_BAM .bam)\.maf \
     --tumor-id $(basename $TUMOR_BAM .bam) \
     --normal-id $(basename $NORMAL_BAM .bam) \
     --vcf-normal-id $(basename $NORMAL_BAM2 .bam) \

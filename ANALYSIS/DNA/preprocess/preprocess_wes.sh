@@ -19,45 +19,50 @@ fi
 # call mutations - loop over all tumor / normal pairs 
 
 for id in 5367 5368 5369; do
+
+echo "Normal for ${id}"
+export NORMAL_BAM=DFCI-${id}-N-01.bam
+sbatch -o ../slurm/${id}N-std.out -e ../slurm/${id}N-std.err call_mutations_normal.sh
+sleep 1 
+
+done
+
+### wait until above is complete before running next steps...
+
+for id in 5367 5368 5369; do
 echo "Tumor vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
 export TUMOR_BAM=DFCI-${id}-T-01.bam
 
-sbatch -o ../slurm/${id}T.out -e ../slurm/${id}T.err call_mutations_single.sh
+sbatch -o ../slurm/${id}T-std.out -e ../slurm/${id}T-std.err call_mutations_single_mutect2.sh
 sleep 1 
 
 echo "Cell line vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
 export TUMOR_BAM=DFCI-${id}-CL-01.bam
 
-sbatch -o ../slurm/${id}C.out -e ../slurm/${id}C.err call_mutations_single.sh
+sbatch -o ../slurm/${id}C-std.out -e ../slurm/${id}C-std.err call_mutations_single_mutect2.sh
 sleep 1 
 done
 
 
 # call mutations - no matched normal
-# use 'contemporary normal' as recommended here: https://gatkforums.broadinstitute.org/gatk/discussion/2249/recommended-syntax-for-unmatched-tumor#latest
-# using a normal sample from a different individual
 
 for id in 5473 5474; do
 echo "Tumor for ${id}"
-export NORMAL_BAM=DFCI-5368-N-01.bam
+export NORMAL_BAM=
 export TUMOR_BAM=DFCI-${id}-T-01.bam
 
-sbatch -o ../slurm/${id}T.out -e ../slurm/${id}T.err call_mutations_single.sh
+sbatch -o ../slurm/${id}T-std.out -e ../slurm/${id}T-std.err call_mutations_single_mutect2.sh
 sleep 1 
 
 echo "Cell line for ${id}"
-export NORMAL_BAM=DFCI-5368-N-01.bam
+export NORMAL_BAM=
 export TUMOR_BAM=DFCI-${id}-C-01.bam
 
-sbatch -o ../slurm/${id}C.out -e ../slurm/${id}C.err call_mutations_single.sh
+sbatch -o ../slurm/${id}C-std.out -e ../slurm/${id}C-std.err call_mutations_single_mutect2.sh
 sleep 1 
 done
-
-
-##################### run CNVkit ############################
-sbatch -o ../slurm/${id}cnvkit.out -e ../slurm/${id}cnvkit.err run_cnvkit.sh
 
 
 
