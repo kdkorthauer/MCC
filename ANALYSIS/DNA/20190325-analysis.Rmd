@@ -33,7 +33,7 @@ library(RColorBrewer)
 library(maftools)
 library(tidyverse)
 
-mafdir <- "../../PREPROCESS/DNA/mutect-results/"
+mafdir <- "../../PREPROCESS/DNA/mutect2-results/"
 ```
 
 Read in maf files:
@@ -80,7 +80,8 @@ getSampleSummary(maf)
 Overall (all three are viral positive): 
 
 ```{r, maf_summary, fig.path="plots/", dev="png"}
-plotmafSummary(maf = maf, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+plotmafSummary(maf = maf, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE, 
+               showBarcodes = TRUE)
 ```
 
 ```{r, titv_summary, fig.path="plots/", dev="png"}
@@ -99,6 +100,10 @@ plotSignatures(sig)
 Compare cell lines to tumors:
 
 ```{r, enrichment, fig.path="plots/", dev="png"}
+maf_subset <- subsetMaf(maf, mafObj = TRUE,
+                 tsb = maf@clinical.data$Tumor_Sample_Barcode[grep("5367|5368|5369",
+                              maf@clinical.data$Tumor_Sample_Barcode)])
+
 enrich <- clinicalEnrichment(maf, clinicalFeature = "type", minMut = 2)
 plotEnrichmentResults(enrich, pVal = 0.1)
 ```
@@ -109,7 +114,8 @@ plotEnrichmentResults(enrich, pVal = 0.1)
 tumors <- maf@clinical.data$Tumor_Sample_Barcode
 tumors <- tumors[grepl("T", tumors)]
 mafT <- subsetMaf(maf, tsb = tumors, mafObj = TRUE)
-plotmafSummary(maf = mafT, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+plotmafSummary(maf = mafT, rmOutlier = FALSE, addStat = 'median', 
+               dashboard = TRUE, titvRaw = FALSE, showBarcodes = TRUE)
 ```
 
 ```{r, titv_summary_T, fig.path="plots/", dev="png"}
@@ -130,7 +136,8 @@ plotSignatures(sig)
 cl <- maf@clinical.data$Tumor_Sample_Barcode
 cl <- cl[grepl("CL", cl)]
 mafCL <- subsetMaf(maf, tsb = cl, mafObj = TRUE)
-plotmafSummary(maf = mafCL, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+plotmafSummary(maf = mafCL, rmOutlier = FALSE, addStat = 'median', 
+               dashboard = TRUE, titvRaw = FALSE, showBarcodes = TRUE)
 ```
 
 ```{r, titv_summary_CL, fig.path="plots/", dev="png"}
@@ -153,7 +160,7 @@ dev.off()
 
 ```{r rainfall, fig.height = 5, fig.width = 7, fig.path="plots/", dev="png"}
 for (s in maf@clinical.data$Tumor_Sample_Barcode){
-  p <- rainfallPlot(maf, tsb = s, detectChangePoints = TRUE)
+  p <- rainfallPlot(maf, tsb = s)
   print(p)
 }
 ```
@@ -199,8 +206,6 @@ tidy_maf <- maf@data
 tidy_maf <- select(tidy_maf, sample_id, Hugo_Symbol) %>%
   group_by(sample_id, Hugo_Symbol) %>%
   summarize(muts = n())
-
-spread(data, key, value, fill = NA, convert = FALSE)
 
 mat_maf <- spread(tidy_maf, sample_id, muts, 0) %>%
   column_to_rownames(var = "Hugo_Symbol")

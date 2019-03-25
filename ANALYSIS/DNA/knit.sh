@@ -12,4 +12,4 @@ export RSTUDIO_PANDOC="/n/helmod/apps/centos7/Core/rstudio/1.1.453-fasrc01/bin/p
 
 # change filename to Rmd to be knitted. 
 # Make sure ncores in Rmd matches -n batch param above
-R -e "rmarkdown::render('20181227-analysis.Rmd')"
+R -e "rmarkdown::render('20190325-analysis.Rmd')"
