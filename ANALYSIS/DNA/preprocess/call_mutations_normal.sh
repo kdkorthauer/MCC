@@ -7,10 +7,10 @@
 #SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
-RESDIR=mutect2-results
+RESDIR=mutect2-gatk4-results
 mkdir -p $RESDIR
+GATK=/n/irizarryfs01_backed_up/kkorthauer/softwareTools/gatk
 
-module load gatk/4.0.2.1-fasrc01
 module load jdk/1.8.0_45-fasrc01
 
 ################
@@ -26,11 +26,10 @@ fi
 
 # first call variants on each normal sample
 if [ ! \( -f $RESDIR/$(basename $NORMAL_BAM .bam)\.vcf \) ] ; then
-  gatk Mutect2 \
+  $GATK/gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
      -I ../../DATA/DNA/$NORMAL_BAM \
      -tumor ${NORMAL_BAM2%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
-     --af-of-alleles-not-in-resource 0.00003125 \
      -O $RESDIR/$(basename $NORMAL_BAM .bam)\.vcf
 fi

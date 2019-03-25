@@ -7,10 +7,10 @@
 #SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
-RESDIR=mutect2-results
+RESDIR=mutect2-gatk4-results
 mkdir -p $RESDIR
+GATK=/n/irizarryfs01_backed_up/kkorthauer/softwareTools/gatk
 
-module load gatk/4.0.2.1-fasrc01
 module load jdk/1.8.0_45-fasrc01
 module load samtools
   # gatk Mutect2 --help
@@ -33,7 +33,7 @@ if [ \( -f $RESDIR/DFCI-5367-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5368-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5369-N-01.vcf \) ] ; then
 if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
- gatk CreateSomaticPanelOfNormals \
+ $GATK/gatk CreateSomaticPanelOfNormals \
    -vcfs $RESDIR/DFCI-5367-N-01.vcf \
    -vcfs $RESDIR/DFCI-5368-N-01.vcf \
    -vcfs $RESDIR/DFCI-5368-N-01.vcf \
@@ -44,30 +44,32 @@ fi
 fi
 
 # run MuTect if output file does not already exist 
+# no af filter needed: https://gatkforums.broadinstitute.org/gatk/discussion/comment/57078
+# need -genotype-germline-sites flag to run with PureCN (https://www.bioconductor.org/packages/devel/bioc/vignettes/PureCN/inst/doc/PureCN.pdf)
 if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \) ] ; then
 if [ \( -f $RESDIR/pon.vcf.gz \) ] ; then
 
 if [ ! -z "$NORMAL_BAM" ]; then
   # matched normal
-  gatk Mutect2 \
+  $GATK/gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
      -I ../../DATA/DNA/$TUMOR_BAM \
      -I ../../DATA/DNA/$NORMAL_BAM \
      -tumor ${TUMOR_BAM%.*} \
      -normal ${NORMAL_BAM2%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
-     --af-of-alleles-not-in-resource 0.00001 \
      --panel-of-normals $RESDIR/pon.vcf.gz \
+     --genotype-germline-sites \
      -O $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf
 else
   # no matched normal
-  gatk Mutect2 \
+  $GATK/gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
      -I ../../DATA/DNA/$TUMOR_BAM \
      -tumor ${TUMOR_BAM%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
-     --af-of-alleles-not-in-resource 0.00000005 \
      --panel-of-normals $RESDIR/pon.vcf.gz \
+     --genotype-germline-sites \
      -O $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf
 fi
 
@@ -76,7 +78,7 @@ fi
 
 # filter variants
 if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf \) ] ; then
-  gatk FilterMutectCalls \
+  $GATK/gatk FilterMutectCalls \
     -V $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \
     -O $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf
 fi
