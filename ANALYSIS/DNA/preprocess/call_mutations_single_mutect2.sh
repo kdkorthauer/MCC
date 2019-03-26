@@ -33,7 +33,11 @@ if [ \( -f $RESDIR/DFCI-5367-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5368-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5369-N-01.vcf \) ] ; then
 if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
- $GATK/gatk CreateSomaticPanelOfNormals \
+ # use gatk3 to create PON - new version req splitting over all contigs 
+ # see if there is a solution after 4.1.1 is released (should be late march 2019)
+ # https://github.com/broadinstitute/gatk/pull/5675
+ module load gatk
+ gatk CreateSomaticPanelOfNormals \
    -vcfs $RESDIR/DFCI-5367-N-01.vcf \
    -vcfs $RESDIR/DFCI-5368-N-01.vcf \
    -vcfs $RESDIR/DFCI-5368-N-01.vcf \
