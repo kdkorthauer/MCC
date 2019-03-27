@@ -3,9 +3,9 @@ library(genomation)
 library(BiocParallel)
 
 annot.dir <- "../../../PREPROCESS/DNA/annotation"
-out.dir <- "../../../PREPROCESS/DNA/purecn"
+out.dir <- "../../../PREPROCESS/DNA/purecn-mt2"
 plot.dir <- file.path(out.dir, "plots")
-mutect.dir <- "../../../PREPROCESS/DNA/mutect-results"
+mutect.dir <- "../../../PREPROCESS/DNA/mutect2-results"
 dir.create(out.dir, showWarnings = FALSE)
 dir.create(plot.dir, showWarnings = FALSE)
 bam.dir <- "../../../DATA/DNA"
