@@ -33,7 +33,7 @@ library(RColorBrewer)
 library(maftools)
 library(tidyverse)
 
-mafdir <- "../../PREPROCESS/DNA/mutect2-results/"
+mafdir <- "../../PREPROCESS/DNA/mutect2-gatk-results/"
 ```
 
 Read in maf files:
