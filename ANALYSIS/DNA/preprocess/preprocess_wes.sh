@@ -18,7 +18,7 @@ fi
 
 # call mutations - loop over all tumor / normal pairs 
 
-for id in 5367 5368 5369; do
+for id in 5350 5351 5367 5368 5369; do
 
 echo "Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
@@ -29,7 +29,7 @@ done
 
 ### wait until above is complete before running next steps...
 
-for id in 5367 5368 5369; do
+for id in 5350 5351 5367 5368 5369; do
 echo "Tumor vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
 export TUMOR_BAM=DFCI-${id}-T-01.bam

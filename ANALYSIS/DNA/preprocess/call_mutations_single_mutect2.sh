@@ -109,7 +109,8 @@ if [ ! -f $RESDIR/$(basename $TUMOR_BAM .bam)\.maf ]; then
     --tumor-id $(basename $TUMOR_BAM .bam) \
     --normal-id $(basename $NORMAL_BAM .bam) \
     --vcf-normal-id $(basename $NORMAL_BAM2 .bam) \
-    --ref-fasta $HOME/.vep/homo_sapiens/86_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz
+    --ref-fasta $HOME/.vep/homo_sapiens/86_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz \
+    --vep-forks 1
 fi
 
 # extract HLA muts
