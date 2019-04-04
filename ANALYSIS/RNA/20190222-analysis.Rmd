@@ -33,6 +33,7 @@ library(dplyr)
 library(tidyr)
 library(DESeq2)
 library(readr)
+library(readxl)
 library(RColorBrewer) 
 library(ComplexHeatmap) 
 library(vsn)
@@ -47,6 +48,7 @@ library(rtracklayer)
 library(RUVSeq)
 library(cowplot)
 library(ggridges)
+library(GGally)
 
 register(MulticoreParam(10))
 
@@ -178,6 +180,7 @@ First we'll remove features (genes) that have mean count across all samples
 less than 1. These are considered not expressed.
 
 ```{r}
+dat.orig <- dat
 filt <- which(rowMeans(counts(dat)) < 1)
 dat <- dat[ -filt, ]
 ```
@@ -314,7 +317,236 @@ vsd = vst(dat)
 meanSdPlot(assay(vsd))
 ```
 
+Pairs scatterplot of all samples
+
+```{r pairscatter, fig.width = 11, fig.height = 10, fig.path='plots/', dev = c('png','pdf')}
+my_fn <- function(data, mapping, ...){
+      p <- ggplot(data = data, mapping = mapping) + 
+        #stat_density2d(aes(fill=..density..), geom="tile", contour = FALSE, n = 100) +
+        geom_hex(bins = 20) +
+        scale_fill_gradientn(colours = viridis::viridis(50)) +
+                               #colorRampPalette(c("white", blues9))(50)) +
+        geom_abline(intercept=0,slope=1, linetype = "dashed") +
+        scale_x_continuous(trans="log10") +
+        scale_y_continuous(trans="log10") +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+      p
+}
+
+my_corr <- function (data, mapping, alignPercent = 0.6, method = "pearson", 
+    use = "complete.obs", corAlignPercent = NULL, corMethod = NULL, 
+    corUse = NULL, ...) 
+{
+    if (!is.null(corAlignPercent)) {
+        stop("'corAlignPercent' is deprecated.  Please use argument 'alignPercent'")
+    }
+    if (!is.null(corMethod)) {
+        stop("'corMethod' is deprecated.  Please use argument 'method'")
+    }
+    if (!is.null(corUse)) {
+        stop("'corUse' is deprecated.  Please use argument 'use'")
+    }
+    useOptions <- c("all.obs", "complete.obs", "pairwise.complete.obs", 
+        "everything", "na.or.complete")
+    use <- pmatch(use, useOptions)
+    if (is.na(use)) {
+        warning("correlation 'use' not found.  Using default value of 'all.obs'")
+        use <- useOptions[1]
+    }
+    else {
+        use <- useOptions[use]
+    }
+    cor_fn <- function(x, y) {
+        cor(x, y, method = method, use = use)
+    }
+    xData <- eval_data_col(data, mapping$x)
+    yData <- eval_data_col(data, mapping$y)
+    if (GGally:::is_date(xData)) {
+        xData <- as.numeric(xData)
+    }
+    if (GGally:::is_date(yData)) {
+        yData <- as.numeric(yData)
+    }
+    colorData <- eval_data_col(data, mapping$colour)
+    if (is.numeric(colorData)) {
+        stop("ggally_cor: mapping color column must be categorical, not numeric")
+    }
+    if (use %in% c("complete.obs", "pairwise.complete.obs", "na.or.complete")) {
+        if (!is.null(colorData) && (length(colorData) == length(xData))) {
+            rows <- complete.cases(xData, yData, colorData)
+        }
+        else {
+            rows <- complete.cases(xData, yData)
+        }
+        if (any(!rows)) {
+            total <- sum(!rows)
+            if (total > 1) {
+                warning("Removed ", total, " rows containing missing values")
+            }
+            else if (total == 1) {
+                warning("Removing 1 row that contained a missing value")
+            }
+        }
+        if (!is.null(colorData) && (length(colorData) == length(xData))) {
+            colorData <- colorData[rows]
+        }
+        xData <- xData[rows]
+        yData <- yData[rows]
+    }
+    xVal <- xData
+    yVal <- yData
+    if (packageVersion("ggplot2") > "2.2.1") {
+        for (mappingName in names(mapping)) {
+            itemData <- eval_data_col(data, mapping[[mappingName]])
+            if (!inherits(itemData, "AsIs")) {
+                mapping[[mappingName]] <- NULL
+            }
+        }
+    }
+    else {
+        if (length(names(mapping)) > 0) {
+            for (i in length(names(mapping)):1) {
+                tmp_map_val <- deparse(mapping[names(mapping)[i]][[1]])
+                if (tmp_map_val[length(tmp_map_val)] %in% colnames(data)) 
+                  mapping[[names(mapping)[i]]] <- NULL
+                if (length(names(mapping)) < 1) {
+                  mapping <- NULL
+                  break
+                }
+            }
+        }
+    }
+    if (!is.null(colorData) && !inherits(colorData, "AsIs")) {
+        cord <- ddply(data.frame(x = xData, y = yData, color = colorData), 
+            "color", function(dt) {
+                cor_fn(dt$x, dt$y)
+            })
+        colnames(cord)[2] <- "correlation"
+        cord$correlation <- signif(as.numeric(cord$correlation), 
+            3)
+        lev <- levels(as.factor(colorData))
+        ord <- rep(-1, nrow(cord))
+        for (i in 1:nrow(cord)) {
+            for (j in seq_along(lev)) {
+                if (identical(as.character(cord$color[i]), as.character(lev[j]))) {
+                  ord[i] <- j
+                }
+            }
+        }
+        cord <- cord[order(ord[ord >= 0]), ]
+        cord$label <- str_c(cord$color, ": ", cord$correlation)
+        xmin <- min(xVal, na.rm = TRUE)
+        xmax <- max(xVal, na.rm = TRUE)
+        xrange <- c(xmin - 0.01 * (xmax - xmin), xmax + 0.01 * 
+            (xmax - xmin))
+        ymin <- min(yVal, na.rm = TRUE)
+        ymax <- max(yVal, na.rm = TRUE)
+        yrange <- c(ymin - 0.01 * (ymax - ymin), ymax + 0.01 * 
+            (ymax - ymin))
+        p <- ggally_text(label = str_c(signif(cor_fn(xVal, 
+            yVal), 2)), mapping = mapping, xP = 0.5, yP = 0.9, 
+            xrange = xrange, yrange = yrange, color = "black", 
+            ...) + theme(legend.position = "none", 
+                         panel.grid.major = element_blank()) 
+        xPos <- rep(alignPercent, nrow(cord)) * diff(xrange) + 
+            min(xrange, na.rm = TRUE)
+        yPos <- seq(from = 0.9, to = 0.2, length.out = nrow(cord) + 
+            1)
+        yPos <- yPos * diff(yrange) + min(yrange, na.rm = TRUE)
+        yPos <- yPos[-1]
+        cordf <- data.frame(xPos = xPos, yPos = yPos, labelp = cord$label)
+        cordf$labelp <- factor(cordf$labelp, levels = cordf$labelp)
+        p <- p + geom_text(data = cordf, aes(x = xPos, y = yPos, 
+            label = labelp, color = labelp), hjust = 1, ...) +
+            theme(panel.grid.major = element_blank())
+        p
+    }
+    else {
+        xmin <- min(xVal, na.rm = TRUE)
+        xmax <- max(xVal, na.rm = TRUE)
+        xrange <- c(xmin - 0.01 * (xmax - xmin), xmax + 0.01 * 
+            (xmax - xmin))
+        ymin <- min(yVal, na.rm = TRUE)
+        ymax <- max(yVal, na.rm = TRUE)
+        yrange <- c(ymin - 0.01 * (ymax - ymin), ymax + 0.01 * 
+            (ymax - ymin))
+        p <- ggally_text(label = paste(signif(cor_fn(xVal, 
+            yVal), 2), sep = "", collapse = ""), mapping, xP = 0.5, 
+            yP = 0.5, xrange = xrange, yrange = yrange, ...) + 
+            theme(legend.position = "none", panel.grid.major = element_blank())
+        p
+    }
+}
+
+plotpairs <- function(mat, main = ""){
+  p1 <- ggpairs(mat,
+                lower = list(continuous = my_fn),
+    upper = list(continuous = wrap(my_corr, size = 6, 
+                                   color = "black", method = "spearman")),
+    xlab = "Normalized Read Count", 
+    ylab = "Normalized Read Count",
+    title = main) + 
+    theme(axis.text.x = element_text(angle=90, hjust = 1))
+  p2 <- ggcorr(mat, label = TRUE, label_round = 2, limits = c(0.5, 1), 
+               midpoint = 0.75, name ="Spearman\nCorrelation", 
+               method = c("pairwise", "spearman"))
+  leg <- get_legend(p2) 
+  
+  g2 <- ggplotGrob(p2)
+  colors <- g2$grobs[[6]]$children[[3]]$gp$fill
+  
+  # Change background color to tiles in the upper triangular matrix of plots 
+  idx <- 1
+  p <- ncol(mat)
+  for (k1 in 1:(p-1)) {
+    for (k2 in (k1+1):p) {
+      plt <- getPlot(p1,k1,k2) +
+        theme(panel.background = element_rect(fill = colors[idx], color="white"),
+              panel.grid.major = element_line(color=colors[idx]))
+      p1 <- putPlot(p1,plt,k1,k2)
+      idx <- idx+1
+    }
+  }
+  
+  for (i in 1:p){ # log scale for the diagonal
+      p1[i,i] <- p1[i,i]+ scale_x_continuous(trans='log10')  
+  } 
+
+  
+  p1 <- plot_grid(ggmatrix_gtable(p1), leg, ncol=2, rel_widths = c(1, 0.2))
+  print(p1)
+}
+
+
+mat <- data.frame(counts(dat, normalize = TRUE)+1)
+x <- match(as.numeric(gsub(".C|.T|.CL", "", gsub("DFCI.", "", colnames(mat)))), id.map$id1)
+colnames(mat) <- paste0(ifelse(grepl("T", colnames(mat)), "T-", "C-"), id.map$id2[x])
+
+
+# just for tumors
+plotpairs(mat[, grepl("T", colnames(mat))], 
+          main = "Correlation of Tumor Samples")
+
+# just for cell lines
+plotpairs(mat[, !grepl("T", colnames(mat))], 
+          main = "Correlation of Cell Line Samples")
+
+# just for virus pos
+plotpairs(mat[, !grepl(paste0(viralneg, collapse = "|"), colnames(mat))], 
+          main = "Correlation of Virus+ Samples")
+
+# just for virus neg
+plotpairs(mat[, grepl(paste0(viralneg, collapse = "|"), colnames(mat))], 
+          main = "Correlation of Virus- Samples")
+
+# for everything
+plotpairs(mat, 
+          main = "Correlation of All Samples")
+
+```
+
 Now we'll plot the distances in a heatmap, first for log2 normalized counts:
+
 
 ```{r heatmap-dist-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
 dists <- dist(t(log2(counts(dat, normalize = TRUE)+1)))
@@ -557,7 +789,7 @@ ggplot(pcaData, aes(PC1, PC2, color=type, shape=mcc.id)) +
 ggsave(file.path("plots", "pca_vscounts_subset.pdf"), width = 5, height = 4)
 ```              
          
-# Characterizing genes of interest
+# Characterizing immune genes of interest
 
 We'll investigate specific genes of interest, including HLA genes. The list of 
 genes is provided in a tab-delimited text file where the first column contains 
@@ -618,6 +850,167 @@ ht = Heatmap(mat, name = "VS counts",
              col = ecolors)
 draw(ht + ha_row)
 ```
+
+# Characterizing ORF screen genes of interest
+
+First we read in the spreadsheet from Patrick with the top 100 positive and negative gene hits.
+
+```{r}
+orf <- read_xlsx("../MCC-301 ORF Screen Gene List.xlsx")
+```
+
+
+```{r}
+# add description to rowdata
+x1 <- which(rowData(dat)$symbol %in% orf$'Negative Hits')
+x2 <- which(rowData(dat)$symbol %in% orf$'Positive Hits')
+
+rowData(dat)$orf <- "None"
+rowData(dat)$orf[x1] <- "Negative"
+rowData(dat)$orf[x2] <- "Positive"
+
+rowData(dat)$negative <- NA
+for(g in x1){
+  rowData(dat)$negative[g] <- orf$'Negative Hits'[orf$'Negative Hits' == rowData(dat)$symbol[g]]
+}
+
+rowData(dat)$positive <- NA
+for(g in x2){
+  rowData(dat)$positive[g] <- orf$'Positive Hits'[orf$'Positive Hits' == rowData(dat)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat, normalized=TRUE)+1)) %>% 
+ mutate(orf = rowData(dat)$orf) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = orf))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byORFstatus.pdf"), width = 9, height = 4)
+
+#### for all genes no filtering
+# add gene symbol to dat.orig
+map <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat.orig), "\\."), 
+				                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat.orig), "\\."), function(x) x[1])),
+           map$ENSEMBL)
+rowData(dat.orig)$symbol <- map$SYMBOL[x]   
+
+# add description to rowdata
+x1 <- which(rowData(dat.orig)$symbol %in% orf$'Negative Hits')
+x2 <- which(rowData(dat.orig)$symbol %in% orf$'Positive Hits')
+
+rowData(dat.orig)$orf <- "None"
+rowData(dat.orig)$orf[x1] <- "Negative"
+rowData(dat.orig)$orf[x2] <- "Positive"
+
+rowData(dat.orig)$negative <- NA
+for(g in x1){
+  rowData(dat.orig)$negative[g] <- orf$'Negative Hits'[orf$'Negative Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+rowData(dat.orig)$positive <- NA
+for(g in x2){
+  rowData(dat.orig)$positive[g] <- orf$'Positive Hits'[orf$'Positive Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat.orig, normalized=TRUE)+1)) %>% 
+ mutate(orf = rowData(dat.orig)$orf) %>%
+ gather("sampleName", "count", 1:ncol(dat.orig)) %>%
+ left_join(data.frame(colData(dat.orig)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = orf))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byORFstatus_allgenes.pdf"), width = 9, height = 4)
+```
+
+Next, we'll create a heatmap of these genes of interest, first for log2 normalized
+counts:
+
+
+```{r heatmap-orf-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('png', 'pdf')}
+x <- which(rowData(dat.orig)$orf %in% c("Negative", "Positive"))
+rN <- match(orf$`Negative Hits`, rowData(dat.orig)$symbol[x])
+rN <- rN[!is.na(rN)]
+rP <- match(orf$`Positive Hits`, rowData(dat.orig)$symbol[x])
+rP <- rP[!is.na(rP)]
+
+# reorder cols
+dat.orig <- dat.orig[,  with(colData(dat.orig), order(type, virus, mcc.id))]
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,][c(rP, rN),] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+rowcol <- c("#8dd3c7", "#fb8072")
+names(rowcol) <- sort(unique(rowData(dat.orig)$orf[x][c(rP, rN)]))
+ha_row = rowAnnotation(df = data.frame(Category = rowData(dat.orig)[x,"orf"][c(rP,rN)]),
+                       col = list(Category = rowcol))
+
+ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat.orig)[, c("type")],
+                                              Virus = colData(dat.orig)[, c("virus")],
+                                              ID = colData(dat.orig)[, c("mcc.id")]),
+                              col = list(Type = c(Cell_line="lightgrey", Tumor="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2))
+
+# cluster rows/cols
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors)
+draw(ht + ha_row)
+
+# don't cluster rows/cols
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors,
+             cluster_columns = FALSE,
+             column_order = seq_len(ncol(dat.orig)),
+             cluster_rows = FALSE)
+draw(ht + ha_row)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-orf-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c('png', 'pdf')}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,][c(rP, rN),]
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 3),
+             col = ecolors)
+draw(ht + ha_row)
+
+# don't cluster rows/cols
+ht = Heatmap(mat, name = "VS", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors,
+             cluster_columns = FALSE,
+             column_order = seq_len(ncol(dat.orig)),
+             cluster_rows = FALSE)
+draw(ht + ha_row)
+```
+
 
 # MCC Polyomavirus
 
@@ -919,7 +1312,7 @@ plotGseaTable(goSets[mainPathways], stats, goRes,
               colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
 ```
 
-### Overlap with Genes of Interest
+### Overlap with immune Genes of Interest
 
 Here we examine the fold changes and significance of differential expression between
 the tumor and cell lines for the genes of interest.
@@ -1104,7 +1497,7 @@ plotGseaTable(goSets[mainPathways], stats, goRes,
               colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
 ```
 
-### Overlap with Genes of Interest
+### Overlap with immune Genes of Interest
 
 Here we examine the fold changes and significance of differential expression between
 the tumor and cell lines for the genes of interest.
