@@ -29,6 +29,8 @@ else
 fi
 
 # create somatic panel of normals
+if [ \( -f $RESDIR/DFCI-5350-N-01.vcf \) ] ; then
+if [ \( -f $RESDIR/DFCI-5351-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5367-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5368-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5369-N-01.vcf \) ] ; then
@@ -42,6 +44,8 @@ if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
    -vcfs $RESDIR/DFCI-5368-N-01.vcf \
    -vcfs $RESDIR/DFCI-5368-N-01.vcf \
    -O $RESDIR/pon.vcf.gz
+fi
+fi
 fi
 fi
 fi
