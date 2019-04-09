@@ -41,6 +41,10 @@ echo "Cell line vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
 export TUMOR_BAM=DFCI-${id}-CL-01.bam
 
+if [ $id = "5350" ] || [ $id = "5351" ]; then
+  export TUMOR_BAM=DFCI-${id}-C-01.bam
+fi
+
 sbatch -o ../slurm/${id}C-std.out -e ../slurm/${id}C-std.err call_mutations_single_mutect2.sh
 sleep 1 
 done
