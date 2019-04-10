@@ -33,7 +33,7 @@ library(RColorBrewer)
 library(maftools)
 library(tidyverse)
 
-mafdir <- "../../PREPROCESS/DNA/mutect2-gatk-results/"
+mafdir <- "../../PREPROCESS/DNA/mutect2-gatk4-results/"
 ```
 
 Read in maf files:
@@ -67,9 +67,16 @@ maf@clinical.data$patient <- ifelse(grepl("5367", maf@clinical.data$Tumor_Sample
                                  ifelse(grepl("5369", maf@clinical.data$Tumor_Sample_Barcode), "301",
                                    ifelse(grepl("5473", maf@clinical.data$Tumor_Sample_Barcode), "320",
                                      ifelse(grepl("5474", maf@clinical.data$Tumor_Sample_Barcode), "367",
-                               NA)))))
+                                       ifelse(grepl("5350", maf@clinical.data$Tumor_Sample_Barcode), "336",
+                                         ifelse(grepl("5351", maf@clinical.data$Tumor_Sample_Barcode), "350",
+                               NA)))))))
 maf@clinical.data$type <- ifelse(grepl("-CL-|-C-", maf@clinical.data$Tumor_Sample_Barcode), "Cell Line",
                           "Tumor")
+
+
+viralneg <- c("286", "350", "290", "282", "320")
+maf@clinical.data$virus <- "pos"
+maf@clinical.data$virus[maf@clinical.data$patient %in% viralneg] <- "neg"
 
 maf@clinical.data
 getSampleSummary(maf)
@@ -77,7 +84,7 @@ getSampleSummary(maf)
 
 # Summary plots
 
-Overall (all three are viral positive): 
+Overall:
 
 ```{r, maf_summary, fig.path="plots/", dev="png"}
 plotmafSummary(maf = maf, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE, 
@@ -100,11 +107,15 @@ plotSignatures(sig)
 Compare cell lines to tumors:
 
 ```{r, enrichment, fig.path="plots/", dev="png"}
-maf_subset <- subsetMaf(maf, mafObj = TRUE,
-                 tsb = maf@clinical.data$Tumor_Sample_Barcode[grep("5367|5368|5369",
-                              maf@clinical.data$Tumor_Sample_Barcode)])
-
 enrich <- clinicalEnrichment(maf, clinicalFeature = "type", minMut = 2)
+plotEnrichmentResults(enrich, pVal = 0.1)
+```
+
+
+Compare viral pos to viral neg:
+
+```{r, enrichmentvirus, fig.path="plots/", dev="png"}
+enrich <- clinicalEnrichment(maf, clinicalFeature = "virus", minMut = 2)
 plotEnrichmentResults(enrich, pVal = 0.1)
 ```
 
@@ -134,7 +145,7 @@ plotSignatures(sig)
 
 ```{r, maf_summary_CL, fig.path="plots/", dev="png"}
 cl <- maf@clinical.data$Tumor_Sample_Barcode
-cl <- cl[grepl("CL", cl)]
+cl <- cl[grepl("CL|-C", cl)]
 mafCL <- subsetMaf(maf, tsb = cl, mafObj = TRUE)
 plotmafSummary(maf = mafCL, rmOutlier = FALSE, addStat = 'median', 
                dashboard = TRUE, titvRaw = FALSE, showBarcodes = TRUE)
@@ -147,6 +158,51 @@ titv.maf$raw.counts
 
 ```{r, signatures_CL, fig.path="plots/", dev="png", eval=FALSE}
 mat <- trinucleotideMatrix(mafCL, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
+         prefix ='chr', add = TRUE, useSyn = TRUE)
+sig <- extractSignatures(mat)
+plotSignatures(sig)
+```
+
+
+## Viral positive only
+
+```{r, maf_summary_Pos, fig.path="plots/", dev="png"}
+pos <- maf@clinical.data$Tumor_Sample_Barcode
+pos <- pos[maf@clinical.data$type == "pos"]
+mafP <- subsetMaf(maf, tsb = tumors, mafObj = TRUE)
+plotmafSummary(maf = mafP, rmOutlier = FALSE, addStat = 'median', 
+               dashboard = TRUE, titvRaw = FALSE, showBarcodes = TRUE)
+```
+
+```{r, titv_summary_Pos, fig.path="plots/", dev="png"}
+titv.maf <- titv(mafP)
+titv.maf$raw.counts
+```
+
+```{r, signatures_Pos, fig.path="plots/", dev="png", eval = FALSE}
+mat <- trinucleotideMatrix(mafP, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
+         prefix ='chr', add = TRUE, useSyn = TRUE)
+sig <- extractSignatures(mat)
+plotSignatures(sig)
+```
+
+## Viral negative only
+
+```{r, maf_summary_Neg, fig.path="plots/", dev="png"}
+neg <- maf@clinical.data$Tumor_Sample_Barcode
+neg <- neg[maf@clinical.data$type == "neg"]
+mafN <- subsetMaf(maf, tsb = tumors, mafObj = TRUE)
+plotmafSummary(maf = mafN, rmOutlier = FALSE, addStat = 'median', 
+               dashboard = TRUE, titvRaw = FALSE, showBarcodes = TRUE)
+```
+
+```{r, titv_summary_Neg, fig.path="plots/", dev="png"}
+titv.maf <- titv(mafN)
+titv.maf$raw.counts
+```
+
+```{r, signatures_Neg, fig.path="plots/", dev="png", eval = FALSE}
+mat <- trinucleotideMatrix(mafN, ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
          prefix ='chr', add = TRUE, useSyn = TRUE)
 sig <- extractSignatures(mat)
 plotSignatures(sig)
@@ -182,18 +238,18 @@ for (s in unique(clusters$clusterMeans$Tumor_Sample_Barcode)){
 # Co-mut plots
 
 ```{r comut, fig.height = 8.5, fig.width = 6, fig.path="plots/", dev="png"}
-fabcolors = RColorBrewer::brewer.pal(n = 5,name = 'Set1')
-names(fabcolors) = c("320", "367", "277", "314", "301")
+fabcolors = RColorBrewer::brewer.pal(n = 7,name = 'Set1')
+names(fabcolors) = c("320", "367", "277", "314", "301", "336", "350")
 fabcolors = list(patient = fabcolors)
 
 oncoplot(maf = maf, top = 50, fontSize = 9, 
          clinicalFeatures = c('type', "patient"),
-         annotationColor = fabcolors, 
-         sampleOrder = c("DFCI-5473-C-01", "DFCI-5473-T-01",
-                         "DFCI-5474-C-01", "DFCI-5474-T-01",
-                         "DFCI-5367-CL-01", "DFCI-5367-T-01",
-                         "DFCI-5368-CL-01", "DFCI-5368-T-01",
-                         "DFCI-5369-CL-01", "DFCI-5369-T-01"))
+         annotationColor = fabcolors) #, 
+      #  sampleOrder = c("DFCI-5473-C-01", "DFCI-5473-T-01",
+      #                   "DFCI-5474-C-01", "DFCI-5474-T-01",
+      #                   "DFCI-5367-CL-01", "DFCI-5367-T-01",
+      #                   "DFCI-5368-CL-01", "DFCI-5368-T-01",
+      #                   "DFCI-5369-CL-01", "DFCI-5369-T-01"))
 ```
 
 # clustering
