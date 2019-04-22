@@ -121,7 +121,7 @@ colnames(id.map) <- c("id1", "id2")
 x <- match(as.numeric(gsub("DFCI_", "", colDat$dfci.id)), id.map$id1)
 colDat$mcc.id <- as.factor(id.map$id2[x])
 
-viralneg <- c("286", "350", "290", "282")
+viralneg <- c("286", "350", "290", "282", "320")
 colDat$virus <- "pos"
 colDat$virus[colDat$mcc.id %in% viralneg] <- "neg"
 colDat$virus <- as.factor(colDat$virus)

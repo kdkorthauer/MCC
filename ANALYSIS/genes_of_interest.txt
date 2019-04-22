@@ -91,3 +91,4 @@ IL13	Anti-inf Cytokine
 IFNA5	Anti-inf Cytokine
 TGFB1	Anti-inf Cytokine
 TGFB2	Anti-inf Cytokine
+NLRC5	Class I
