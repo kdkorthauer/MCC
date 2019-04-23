@@ -961,7 +961,7 @@ names(rowcol) <- sort(unique(rowData(dat.orig)$orf[x][c(rP, rN)]))
 ha_row = rowAnnotation(df = data.frame(Category = rowData(dat.orig)[x,"orf"][c(rP,rN)]),
                        col = list(Category = rowcol))
 
-ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat.orig)[, c("type")],
+ha_column_orf = HeatmapAnnotation(df = data.frame(Type = colData(dat.orig)[, c("type")],
                                               Virus = colData(dat.orig)[, c("virus")],
                                               ID = colData(dat.orig)[, c("mcc.id")]),
                               col = list(Type = c(Cell_line="lightgrey", Tumor="black"), 
@@ -970,14 +970,14 @@ ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat.orig)[, c("type
 
 # cluster rows/cols
 ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
-             top_annotation = ha_column,
+             top_annotation = ha_column_orf,
              row_names_gp = gpar(fontsize = 4),
              col = ecolors)
 draw(ht + ha_row)
 
 # don't cluster rows/cols
 ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
-             top_annotation = ha_column,
+             top_annotation = ha_column_orf,
              row_names_gp = gpar(fontsize = 4),
              col = ecolors,
              cluster_columns = FALSE,
@@ -995,14 +995,14 @@ rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
 colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
 ht = Heatmap(mat, name = "VS counts", 
-             top_annotation = ha_column,
+             top_annotation = ha_column_orf,
              row_names_gp = gpar(fontsize = 3),
              col = ecolors)
 draw(ht + ha_row)
 
 # don't cluster rows/cols
 ht = Heatmap(mat, name = "VS", 
-             top_annotation = ha_column,
+             top_annotation = ha_column_orf,
              row_names_gp = gpar(fontsize = 4),
              col = ecolors,
              cluster_columns = FALSE,
