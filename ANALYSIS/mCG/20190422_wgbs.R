@@ -59,6 +59,7 @@ if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
     ix <- which(rowSums(cov.mat) == 0)
     meth.mat <- meth.mat[-ix,]
     cov.mat <- cov.mat[-ix,]
+    cov.mat <- cov.mat + meth.mat
     chr <- chr[-ix]
     pos <- pos[-ix]
 
@@ -66,6 +67,25 @@ if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
     	        Cov = as.matrix(cov.mat),
     	        pos = pos,
     	        chr = chr)
+
+    # collapse strands
+    library(BSgenome.Hsapiens.UCSC.hg38)  
+	chrom <- names(Hsapiens)[1:25]
+	cgs <- lapply(chrom, function(x) start(matchPattern("CG", Hsapiens[[x]])))
+
+	cpgr <- do.call(c, lapply(1:25, function(x) GRanges(names(Hsapiens)[x], IRanges(cgs[[x]], width = 2))))
+	seqlevels(cpgr) <- gsub("chr", "", seqlevels(cpgr))
+	seqlevels(cpgr) <- gsub("M", "MT", seqlevels(cpgr))
+	end(cpgr) <- start(cpgr) # represent only one strand
+
+	pos <- findOverlaps(bs, cpgr)
+	strand(bs) <- "-"
+	strand(bs[pos@from]) <- "+"
+    bs <- strandCollapse(bs)
+
+    pData(bs)$sample <- colnames(meth.mat)
+    pData(bs)$virus <- "Positive"
+    pData(bs)$virus[grepl("2|3|5|7", pData(bs)$sample)] <- "Negative"
 
     saveRDS(bs, file = bsseq.obj)
   }else{
@@ -75,6 +95,18 @@ if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
 
 
 
-M <- matrix(0:8, 3, 3)
-Cov <- matrix(1:9, 3, 3)
-BS1 <- BSseq(chr = c("chr1", "chr2", "chr1"), pos = c(1,2,3),M = M, Cov = Cov, sampleNames = c("A","B", "C"))
+set.seed(486)
+idx <- sample(1:nrow(bs), 1e6)
+plotEmpiricalDistribution(bs[idx,], 
+                          testCovariate = "virus",
+                          type = "Cov")
+plotEmpiricalDistribution(bs[idx,], 
+                          bySample = TRUE,
+                          testCovariate = "virus",
+                          adj = 3)
+plotEmpiricalDistribution(bs[idx,], 
+                          testCovariate = "virus",
+                          adj = 3)
+
+
+
