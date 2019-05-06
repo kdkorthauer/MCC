@@ -5,12 +5,17 @@ library(dplyr)
 library(tidyr)
 library(bsseq)
 library(dmrseq)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(org.Hs.eg.db)
 
 dat.dir <- file.path("../../DATA/mCG/wgbs/cov")
 dat.files <- list.files(dat.dir, full.names = TRUE)
 count.tab <- file.path(dat.dir, "counts.txt") 
 bsseq.obj <- file.path(dat.dir, "bsseq.rds")
-
+out.dir <- file.path("../../ANALYSIS/mCG/plots")
+dir.create(out.dir, showWarnings=FALSE)
 
 if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
   # get counts table
@@ -90,10 +95,17 @@ if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
     saveRDS(bs, file = bsseq.obj)
   }else{
   	bs <- readRDS(bsseq.obj)
+    pData(bs)$mcc.id <- c("275", "282", "290", "301", "320",
+                          "336", "350", "367", "2314")
+    pData(bs)$ifng <- "++"
+    pData(bs)$ifng[grepl("336|350", pData(bs)$mcc.id)] <- "-"
+    pData(bs)$ifng[grepl("2314|320", pData(bs)$mcc.id)] <- "+"
   }
 }
 
-
+# filter (at least 4 samples have coverage)
+ix <- which(rowSums(getCoverage(bs, type = "Cov") > 0) >= 4)
+bs <- bs[ix,]
 
 set.seed(486)
 idx <- sample(1:nrow(bs), 1e6)
@@ -108,5 +120,132 @@ plotEmpiricalDistribution(bs[idx,],
                           testCovariate = "virus",
                           adj = 3)
 
+
+plotEmpiricalDistribution(bs[idx,], 
+                          testCovariate = "ifng",
+                          type = "Cov")
+plotEmpiricalDistribution(bs[idx,], 
+                          bySample = TRUE,
+                          testCovariate = "ifng",
+                          adj = 3)
+plotEmpiricalDistribution(bs[idx,], 
+                          testCovariate = "ifng",
+                          adj = 3)
+
+
+goi <- read_tsv("../genes_of_interest.txt", col_names = FALSE)
+colnames(goi) <- c("symbol", "description")
+
+# get coords of genes of interest 
+db <- TxDb.Hsapiens.UCSC.hg38.knownGene
+tx = transcriptsBy(db)
+prom = promoters(tx)
+
+
+x <- org.Hs.egSYMBOL
+# Get the gene symbol that are mapped to an entrez gene identifiers
+mapped_genes <- mappedkeys(x)
+# Convert to a list
+xx <- as.list(x[mapped_genes])
+names(prom) <- unlist(xx[names(prom)])
+seqlevelsStyle(prom) <- "NCBI"
+prom = unlist(prom[names(prom) %in% goi$symbol])
+prom$symbol <- names(prom)
+
+# overlap with meth
+bs.prom <- subsetByOverlaps(bs, prom)
+prom.bs <- subsetByOverlaps(prom, bs)
+
+overlaps <- findOverlaps(bs, prom)
+signal <- bs[overlaps@from]
+averagedSignal <- aggregate(getMeth(bs, type="raw")[overlaps@from,], 
+                            list(overlaps@to), mean, na.rm = TRUE)
+
+averagedSignal <- aggregate(averagedSignal[,-1],
+                            list(prom.bs$symbol), mean, na.rm = TRUE)
+rownames(averagedSignal) <- averagedSignal$Group.1
+
+# heatmap of goi with viral status and ifng labels
+ecolors <- c("white",colorRampPalette( (brewer.pal(9, "Reds")) )(255)) 
+virus <- c("lightgrey", "black")
+ifng <- c("darkred", "darkblue", "lightblue")
+names(virus) <- c("Positive", "Negative")
+names(ifng) <- c("-", "++", "+")
+
+# all goi
+goi$description[grepl("DC", goi$description)] <- "DC/Mono/Macro"
+goi$description[grepl("antigen", goi$description)] <- "MCPyV antigen"
+goi$description[grepl("Cytokine", goi$description)] <- "Cytokine"
+goi$description[grepl("cell", goi$description)] <- "B/T cell"
+
+ha_column = HeatmapAnnotation(df = data.frame(Virus = pData(bs)$virus,
+                                              IFNg = pData(bs)$ifng),
+                              col = list(Virus = virus,
+                                         IFNg = ifng))
+
+x <- match(goi$symbol, averagedSignal$Group.1)
+x <- x[!is.na(x)]
+rowcol <- colorRampPalette( rev(brewer.pal(length(unique(goi$description[x])),
+             "Paired")) )(length(unique(goi$description[x])))
+names(rowcol) <- sort(unique(goi$description[x]))
+ha_row = rowAnnotation(df = data.frame(Category = goi$description[x]),
+                       col = list(Category = rowcol))
+
+
+ht = Heatmap(averagedSignal[,-1], name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = FALSE, show_column_names = FALSE)
+
+heatmap.file <- file.path(out.dir, "heatmap_all.pdf")
+
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
+# just class I
+y <- goi$description[x] == "Class I"
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE)
+ha_row = rowAnnotation(df = data.frame(Category = goi$description[x][y]),
+                       col = list(Category = rowcol))
+
+heatmap.file <- file.path(out.dir, "heatmap_classI.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
+# just class II
+y <- goi$description[x] == "Class II"
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE)
+ha_row = rowAnnotation(df = data.frame(Category = goi$description[x][y]),
+                       col = list(Category = rowcol))
+
+heatmap.file <- file.path(out.dir, "heatmap_classII.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
+# other
+y <- !(goi$description[x] %in% c("Class I", "Class II"))
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE)
+ha_row = rowAnnotation(df = data.frame(Category = goi$description[x][y]),
+                       col = list(Category = rowcol))
+
+heatmap.file <- file.path(out.dir, "heatmap_other.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
+# traceplot meth colored by viral status
+ 
+# traceplot meth colored by ifng status
 
 
