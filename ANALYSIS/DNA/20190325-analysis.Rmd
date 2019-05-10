@@ -41,7 +41,11 @@ Read in maf files:
 ```{r}
 maf.files <- list.files(path = mafdir, pattern = "*.maf", full.names = TRUE)
 
+maf <- data.table::fread(maf.files[1])
+vcNames <- names(table(maf$Variant_Classification))
 maf = maftools:::merge_mafs(maf = maf.files, MAFobj = TRUE)
+maf_all = maftools:::merge_mafs(maf = maf.files, MAFobj = TRUE, 
+  vc_nonSyn = vcNames)
 ```
 
 We'll also add in the metadata from the de-identified excel file so we can map
@@ -79,7 +83,10 @@ maf@clinical.data$virus <- "pos"
 maf@clinical.data$virus[maf@clinical.data$patient %in% viralneg] <- "neg"
 
 maf@clinical.data
+maf_all@clinical.data <- maf@clinical.data
+
 getSampleSummary(maf)
+getSampleSummary(maf_all)
 ```
 
 # Summary plots
@@ -240,16 +247,38 @@ for (s in unique(clusters$clusterMeans$Tumor_Sample_Barcode)){
 ```{r comut, fig.height = 8.5, fig.width = 6, fig.path="plots/", dev="png"}
 fabcolors = RColorBrewer::brewer.pal(n = 7,name = 'Set1')
 names(fabcolors) = c("320", "367", "277", "314", "301", "336", "350")
-fabcolors = list(patient = fabcolors)
+typecols <- rev(c("black", "grey"))
+names(typecols) <- c("Cell Line", "Tumor")
+fabcolors = list(patient = fabcolors,
+                 type = typecols)
 
-oncoplot(maf = maf, top = 50, fontSize = 9, 
+oncoplot(maf = maf, top = 50,
          clinicalFeatures = c('type', "patient"),
-         annotationColor = fabcolors) #, 
+         annotationColor = fabcolors,
+         fontSize = 0.8) #, 
       #  sampleOrder = c("DFCI-5473-C-01", "DFCI-5473-T-01",
       #                   "DFCI-5474-C-01", "DFCI-5474-T-01",
       #                   "DFCI-5367-CL-01", "DFCI-5367-T-01",
       #                   "DFCI-5368-CL-01", "DFCI-5368-T-01",
       #                   "DFCI-5369-CL-01", "DFCI-5369-T-01"))
+```
+
+## Co-mut plots for AP genes
+
+```{r comut-goi, fig.height = 8.5, fig.width = 6, fig.path="plots/", dev="png"}
+goi <- read_tsv("../genes_of_interest.txt", col_names = FALSE)
+colnames(goi) <- c("symbol", "description", "AP")
+
+ap_genes <- goi$symbol[goi$AP & !is.na(goi$AP)]
+
+pdf("plots/oncoplot_apgenes.pdf", height = 10)
+oncoplot(maf = maf, genes=ap_genes, 
+         clinicalFeatures = c('type', "patient"),
+         annotationColor = fabcolors,
+         removeNonMutated = FALSE,
+         fill = TRUE, # have to use github version to have this arg)
+         fontSize = 0.8)
+dev.off()
 ```
 
 # clustering
