@@ -271,14 +271,14 @@ colnames(goi) <- c("symbol", "description", "AP")
 
 ap_genes <- goi$symbol[goi$AP & !is.na(goi$AP)]
 
-pdf("plots/oncoplot_apgenes.pdf", height = 10)
+#pdf("plots/oncoplot_apgenes.pdf", height = 10)
 oncoplot(maf = maf, genes=ap_genes, 
          clinicalFeatures = c('type', "patient"),
          annotationColor = fabcolors,
          removeNonMutated = FALSE,
          fill = TRUE, # have to use github version to have this arg)
          fontSize = 0.8)
-dev.off()
+#dev.off()
 ```
 
 # clustering
