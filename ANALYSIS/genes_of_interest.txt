@@ -1,43 +1,43 @@
-LAMP2	Class II
-CD74	Class II
-HLA-DMA	Class II
-HLA-DMB	Class II
-HLA-DOA	Class II
-HLA-DOB	Class II
-CIITA	Class II
-HLA-DP	Class II
-HLA-DQ	Class II
-HLA-DR	Class II
-CTSS	Class II
-CTSL	Class II
-CTSB	Class II
-CTSD	Class II
-IFI30	Class II
-ERAP1	Class I
-CANX	Class I
-PSMB9	Class I
-PSMB8	Class I
-PSMB10	Class I
-PSME1	Class I
-PSME2	Class I
-PSMB5	Class I
-PSMB6	Class I
-PSMB7	Class I
-ERAP2	Class I
-CALR	Class I
-TAPBP	Class I
-PDIA3	Class I
-TAP1	Class I
-TAP2	Class I
-HLA-A	Class I
-HLA-B	Class I
-HLA-C	Class I
-B2M	Class I
-HLA-E	Class I
-SYP	MCC Marker
-CHGA	MCC Marker
-SOX2	MCC Marker
-KRT20	MCC Marker
+LAMP2	Class II 	TRUE
+CD74	Class II 	TRUE
+HLA-DMA	Class II 	TRUE
+HLA-DMB	Class II 	TRUE
+HLA-DOA	Class II 	TRUE
+HLA-DOB	Class II 	TRUE
+CIITA	Class II 	TRUE
+HLA-DP	Class II 	TRUE
+HLA-DQ	Class II 	TRUE
+HLA-DR	Class II 	TRUE
+CTSS	Class II 	TRUE
+CTSL	Class II 	TRUE
+CTSB	Class II 	TRUE
+CTSD	Class II 	TRUE
+IFI30	Class II 	TRUE
+ERAP1	Class I 	TRUE
+CANX	Class I 	TRUE
+PSMB9	Class I 	TRUE
+PSMB8	Class I 	TRUE
+PSMB10	Class I 	TRUE
+PSME1	Class I 	TRUE
+PSME2	Class I 	TRUE
+PSMB5	Class I 	TRUE
+PSMB6	Class I 	TRUE
+PSMB7	Class I 	TRUE
+ERAP2	Class I 	TRUE
+CALR	Class I 	TRUE
+TAPBP	Class I 	TRUE
+PDIA3	Class I 	TRUE
+TAP1	Class I 	TRUE
+TAP2	Class I 	TRUE
+HLA-A	Class I 	TRUE
+HLA-B	Class I 	TRUE
+HLA-C	Class I		TRUE
+B2M	Class I 	TRUE
+HLA-E	Class I 	TRUE
+SYP	MCC Marker 	TRUE
+CHGA	MCC Marker	TRUE
+SOX2	MCC Marker	TRUE
+KRT20	MCC Marker	TRUE
 STAg	MCPyV Small T antigen
 LTAg	MCPyV Large T antigen
 PHLDA1	MAPK Pathway
