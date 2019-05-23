@@ -61,8 +61,8 @@ if [ ! -z "$NORMAL_BAM" ]; then
   # matched normal
   $GATK/gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-     -I ../../DATA/DNA/$TUMOR_BAM \
-     -I ../../DATA/DNA/$NORMAL_BAM \
+     -I /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$TUMOR_BAM \
+     -I /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$NORMAL_BAM \
      -tumor ${TUMOR_BAM%.*} \
      -normal ${NORMAL_BAM2%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
@@ -73,7 +73,7 @@ else
   # no matched normal
   $GATK/gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-     -I ../../DATA/DNA/$TUMOR_BAM \
+     -I /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$TUMOR_BAM \
      -tumor ${TUMOR_BAM%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
      --panel-of-normals $RESDIR/pon.vcf.gz \

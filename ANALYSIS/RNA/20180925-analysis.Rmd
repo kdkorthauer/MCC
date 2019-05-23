@@ -487,14 +487,15 @@ if(file.exists(viralquant_file)){
 Here we use the `Gviz` package to visualize the alignment of the reads that map to the MCC viral genome. 
 
 ```{r, fig.height=8}
-coverageTracks <- list.files(path = "../../DATA/RNA/", 
+coverageTracks <- list.files(path = "/n/irizarryfs01/kkorthauer/MCC/DATA/RNA/", 
                              pattern = ".bedGraph",
                              full.names = TRUE)
 covlist <- vector(mode="list", length(coverageTracks ))
 covlist <- GRangesList()
 track <- vector("list", length(coverageTracks)+1)
 
-nms <- list.files(path = "../../DATA/RNA/", pattern = ".bedGraph")
+nms <- list.files(path = "/n/irizarryfs01/kkorthauer/MCC/DATA/RNA/", 
+                  pattern = ".bedGraph")
 nms <- sapply(strsplit(nms, "-01_unmapped_"), function(x) x[1])
 names(track) <- nms
 

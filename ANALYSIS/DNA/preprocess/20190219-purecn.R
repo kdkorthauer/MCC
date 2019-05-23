@@ -8,7 +8,7 @@ plot.dir <- file.path(out.dir, "plots")
 mutect.dir <- "../../../PREPROCESS/DNA/mutect2-gatk4-results"
 dir.create(out.dir, showWarnings = FALSE)
 dir.create(plot.dir, showWarnings = FALSE)
-bam.dir <- "../../../DATA/DNA"
+bam.dir <- "/n/irizarryfs01/kkorthauer/MCC/DATA/DNA"
 
 register(MulticoreParam(6))
 

@@ -8,7 +8,7 @@
 #SBATCH -e ../_slurm/downloaddropbox_%j.err  # File to which STDERR will be written, %j inserts jobid
 
 module load rclone
-cd ../../../DATA/mCG/wgbs
+cd /n/irizarryfs01/kkorthauer/MCC/DATA/mCG/wgbs
 
 rclone copy "dropbox:MCC/Bismark Bisulfite Data - Ben Singer - wgbs" .
 # wgbs in cov dir

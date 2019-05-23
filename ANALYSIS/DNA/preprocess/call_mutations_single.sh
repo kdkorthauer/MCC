@@ -21,8 +21,8 @@ if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \) ] ; then
     --analysis_type MuTect \
     --reference_sequence annotation/GATK_bundle_b37/human_g1k_v37.fasta \
     --dbsnp annotation/GATK_bundle_b37/dbsnp_138.b37.vcf \
-    --input_file:normal ../../DATA/DNA/$NORMAL_BAM \
-    --input_file:tumor ../../DATA/DNA/$TUMOR_BAM \
+    --input_file:normal /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$NORMAL_BAM \
+    --input_file:tumor /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$TUMOR_BAM \
     --out $RESDIR/$(basename $TUMOR_BAM .bam)\_call_stats.txt \
     --coverage_file $RESDIR/$(basename $TUMOR_BAM .bam)\_coverage.wig.txt \
     -vcf $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf 

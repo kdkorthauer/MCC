@@ -1027,7 +1027,7 @@ reference sequence for the MCC polyomavirus.
 
 if(file.exists(viralquant_file)){
  viral <- read.table(viralquant_file) %>%
-   mutate(sampleName = gsub("/n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/", "", V1),
+   mutate(sampleName = gsub("/n/irizarryfs01/kkorthauer/MCC/DATA/RNA/", "", V1),
           sampleName = gsub("-", "\\.", gsub(".01.unmapped.virusmap.bam", "", sampleName)),
           dfci.id = gsub("\\.", "_", substr(sampleName, 1, 9)),
           type = ifelse(grepl("T", sampleName), "Tumor", "Cell_line")) %>%
@@ -1063,14 +1063,15 @@ if(file.exists(viralquant_file)){
 Here we use the `Gviz` package to visualize the alignment of the reads that map to the MCC viral genome. 
 
 ```{r, fig.height=8}
-coverageTracks <- list.files(path = "../../DATA/RNA/", 
+coverageTracks <- list.files(path = "/n/irizarryfs01/kkorthauer/MCC/DATA/RNA/", 
                              pattern = ".bedGraph",
                              full.names = TRUE)
 covlist <- vector(mode="list", length(coverageTracks ))
 covlist <- GRangesList()
 track <- vector("list", length(coverageTracks)+1)
 
-nms <- list.files(path = "../../DATA/RNA/", pattern = ".bedGraph")
+nms <- list.files(path = "/n/irizarryfs01/kkorthauer/MCC/DATA/RNA/", 
+                  pattern = ".bedGraph")
 nms <- sapply(strsplit(nms, "-01_unmapped_"), function(x) x[1])
 names(track) <- nms
 

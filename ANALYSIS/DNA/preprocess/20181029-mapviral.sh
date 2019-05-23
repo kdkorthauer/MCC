@@ -26,7 +26,7 @@ cd ..
 # pull out unmapped reads from original BAMs
 module load samtools
 
-for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/*1.bam; do
+for i in /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/*1.bam; do
     [ -f "$i" ] || break
     samp=$(basename $i .bam)
     pref=$(dirname $i)
@@ -37,7 +37,7 @@ done
 
 
 # realign unmapped reads to viral genomes
-for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/*unmapped.bam; do
+for i in /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/*unmapped.bam; do
     [ -f "$i" ] || break
     samp=$(basename $i .bam)
     pref=$(dirname $i)
@@ -48,7 +48,7 @@ for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/*unmapped.bam; do
 done
 
 # query which samples had reads aligned to the mcc polyomav
-for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/*virusmap.bam; do
+for i in /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/*virusmap.bam; do
     [ -f "$i" ] || break
     samtools view $i | cut -f3 | sort | uniq -c | awk -v i=$i '{print i"\t"$1"\t"$2}' >> virus.read.counts.txt
 done

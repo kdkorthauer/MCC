@@ -2,7 +2,7 @@ library(readxl)
 library(tidyverse)
 library(colordistance)
 
-datdir <- file.path("/n/irizarryfs01_backed_up/kkorthauer",
+datdir <- file.path("/n/irizarryfs01/kkorthauer",
 	"MCC/DATA/DNA")
 
 fp1 <- read_xls(file.path(datdir, "20190403_fingerprinting_candace_1.xls"))

@@ -4,7 +4,7 @@
 ### parameters 
 ######################################################
 # root directory of RNAseq data
-export DATDIR='/n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA'
+export DATDIR='/n/irizarryfs01/kkorthauer/MCC/DATA/RNA'
 # root directory of RNAseq counts
 export COUNTDIR='/n/irizarryfs01_backed_up/kkorthauer/MCC/PREPROCESS/RNA'
 # reference genome assembly 

@@ -1,6 +1,6 @@
 
 # where data will be saved
-outfile=/n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/
+outfile=/n/irizarryfs01/kkorthauer/MCC/DATA/DNA/
 
 # assumes that gsutil is installed and account is authenticated to download the 
 # data from the Broad's fire cloud -- requires specific python environment with 
@@ -14,7 +14,7 @@ outfile=/n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/
 module load Anaconda/5.0.1-fasrc02
 source activate gcloud2
 
-fnames="$(cut -f8 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/sample.tsv)"
+fnames="$(cut -f8 /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/sample.tsv)"
 
 for f in $fnames 
 do
@@ -25,7 +25,7 @@ do
   fi
 done
 
-fnames="$(cut -f7 /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/DNA/sample.tsv)"
+fnames="$(cut -f7 /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/sample.tsv)"
 
 # also get bais
 for f in $fnames 

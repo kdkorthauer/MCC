@@ -28,7 +28,7 @@ fi
 if [ ! \( -f $RESDIR/$(basename $NORMAL_BAM .bam)\.vcf \) ] ; then
   $GATK/gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-     -I ../../DATA/DNA/$NORMAL_BAM \
+     -I /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$NORMAL_BAM \
      -tumor ${NORMAL_BAM2%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
      -O $RESDIR/$(basename $NORMAL_BAM .bam)\.vcf

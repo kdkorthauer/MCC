@@ -10,7 +10,7 @@ library(ComplexHeatmap)
 library(RColorBrewer)
 library(org.Hs.eg.db)
 
-dat.dir <- file.path("../../DATA/mCG/wgbs/cov")
+dat.dir <- file.path("/n/irizarryfs01/kkorthauer/MCC/DATA/mCG/wgbs/cov")
 dat.files <- list.files(dat.dir, full.names = TRUE)
 count.tab <- file.path(dat.dir, "counts.txt") 
 bsseq.obj <- file.path(dat.dir, "bsseq.rds")
@@ -25,15 +25,15 @@ if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
 	  	 col_types = list(col_character(), col_double(),
 	  	 	              col_double(), col_double(), 
 	  	 	              col_double(), col_double())) %>%
-	     select(-X3,-X4) %>%
-	     rename(chr = X1,
-	     	    pos = X2) %>%
+	     dplyr::select(-X3,-X4) %>%
+	     dplyr::rename(chr = X1,
+	     	      pos = X2) %>%
 	     arrange(chr, pos)
 
 	  colnames(tab)[3] <- paste0("M_", substr(
-	    	gsub("../../DATA/mCG/wgbs/cov/1623D-52-", "", dat.files[f]), 1, 2))  
+	    	gsub("/n/irizarryfs01/kkorthauer/MCC/DATA/mCG/wgbs/cov/1623D-52-", "", dat.files[f]), 1, 2))  
 	  colnames(tab)[4] <- paste0("Cov_", substr(
-	    	gsub("../../DATA/mCG/wgbs/cov/1623D-52-", "", dat.files[f]), 1, 2))
+	    	gsub("/n/irizarryfs01/kkorthauer/MCC/DATA/mCG/wgbs/cov/1623D-52-", "", dat.files[f]), 1, 2))
 
 	  if (f > 1){
 	    tab <- full_join(tab_prev, tab, by = c("chr", "pos")) 

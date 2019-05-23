@@ -26,7 +26,7 @@ cd ..
 module load samtools
 module load bedtools2
 
-for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*1.bam; do
+for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*1.bam; do
     [ -f "$i" ] || break
     samp=$(basename $i .bam)
     pref=$(dirname $i)
@@ -37,7 +37,7 @@ done
 
 
 # realign unmapped reads to viral genomes
-for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*unmapped.bam; do
+for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*unmapped.bam; do
     [ -f "$i" ] || break
     samp=$(basename $i .bam)
     pref=$(dirname $i)
@@ -52,7 +52,7 @@ done
 # 2. index bam 
 # 3. convert to bedGraph
 
-for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
+for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
     samp=$(basename $i)
     pref=$(dirname $i)
     if [[ ! -e $pref/$samp\.sorted.bam ]]; then
@@ -70,7 +70,7 @@ done
 
 
 # query which samples had reads aligned to the mcc polyomav
-for i in /n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
+for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
     [ -f "$i" ] || break
     samtools view $i | cut -f3 | sort | uniq -c | awk -v i=$i '{print i"\t"$1"\t"$2}' >> virus.read.counts.txt
 done
