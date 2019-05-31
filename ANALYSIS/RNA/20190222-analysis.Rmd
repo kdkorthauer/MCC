@@ -853,7 +853,7 @@ draw(ht + ha_row)
 
 # Characterizing ORF screen genes of interest
 
-First we read in the spreadsheet from Patrick with the top 100 positive and negative gene hits.
+First we read in the spreadsheet from Patrick with the top 100 positive and negative gene hits for the ORF screen.
 
 ```{r}
 orf <- read_xlsx("../MCC-301 ORF Screen Gene List.xlsx")
@@ -1010,6 +1010,168 @@ ht = Heatmap(mat, name = "VS",
              cluster_rows = FALSE)
 draw(ht + ha_row)
 ```
+
+
+# Characterizing CRISPR screen genes of interest
+
+First we read in the spreadsheet from Patrick with the top and bottom 100 gene hits for the CRISPR screen.
+
+```{r}
+crispr <- read_xlsx("../MHC CRISPR Screen Top 100 Hits.xlsx", skip = 1, col_names = TRUE)
+```
+
+
+```{r}
+# add description to rowdata
+x1 <- which(rowData(dat)$symbol %in% crispr$'Top Hits')
+x2 <- which(rowData(dat)$symbol %in% crispr$'Bottom Hits')
+
+rowData(dat)$crispr <- "None"
+rowData(dat)$crispr[x1] <- "Top"
+rowData(dat)$crispr[x2] <- "Bottom"
+
+rowData(dat)$Top <- NA
+for(g in x1){
+  rowData(dat)$Top[g] <- crispr$'Top Hits'[crispr$'Top Hits' == rowData(dat)$symbol[g]]
+}
+
+rowData(dat)$Bottom <- NA
+for(g in x2){
+  rowData(dat)$Bottom[g] <- crispr$'Bottom Hits'[crispr$'Bottom Hits' == rowData(dat)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat, normalized=TRUE)+1)) %>% 
+ mutate(crispr = rowData(dat)$crispr) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = crispr))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byCRISPRstatus.pdf"), width = 9, height = 4)
+
+#### for all genes no filtering
+# add gene symbol to dat.orig
+map <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat.orig), "\\."), 
+				                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat.orig), "\\."), function(x) x[1])),
+           map$ENSEMBL)
+rowData(dat.orig)$symbol <- map$SYMBOL[x]   
+
+# add description to rowdata
+x1 <- which(rowData(dat.orig)$symbol %in% crispr$'Top Hits')
+x2 <- which(rowData(dat.orig)$symbol %in% crispr$'Bottom Hits')
+
+rowData(dat.orig)$crispr <- "None"
+rowData(dat.orig)$crispr[x1] <- "Top"
+rowData(dat.orig)$crispr[x2] <- "Bottom"
+
+rowData(dat.orig)$Top <- NA
+for(g in x1){
+  rowData(dat.orig)$Top[g] <- crispr$'Top Hits'[crispr$'Top Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+rowData(dat.orig)$Bottom <- NA
+for(g in x2){
+  rowData(dat.orig)$Bottom[g] <- crispr$'Bottom Hits'[crispr$'Bottom Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat.orig, normalized=TRUE)+1)) %>% 
+ mutate(crispr = rowData(dat.orig)$crispr) %>%
+ gather("sampleName", "count", 1:ncol(dat.orig)) %>%
+ left_join(data.frame(colData(dat.orig)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = crispr))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byCRISPRstatus_allgenes.pdf"), width = 9, height = 4)
+```
+
+Next, we'll create a heatmap of these genes of interest, first for log2 normalized
+counts:
+
+
+```{r heatmap-orf-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('png', 'pdf')}
+x <- which(rowData(dat.orig)$crispr %in% c("Top", "Bottom"))
+rN <- match(crispr$`Top Hits`, rowData(dat.orig)$symbol[x])
+rN <- rN[!is.na(rN)]
+rP <- match(crispr$`Bottom Hits`, rowData(dat.orig)$symbol[x])
+rP <- rP[!is.na(rP)]
+
+# reorder cols
+dat.orig <- dat.orig[,  with(colData(dat.orig), order(type, virus, mcc.id))]
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,][c(rP, rN),] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+rowcol <- c("#8dd3c7", "#fb8072")
+names(rowcol) <- sort(unique(rowData(dat.orig)$crispr[x][c(rP, rN)]))
+ha_row = rowAnnotation(df = data.frame(Category = rowData(dat.orig)[x,"crispr"][c(rP,rN)]),
+                       col = list(Category = rowcol))
+
+ha_column_crispr = HeatmapAnnotation(df = data.frame(Type = colData(dat.orig)[, c("type")],
+                                              Virus = colData(dat.orig)[, c("virus")],
+                                              ID = colData(dat.orig)[, c("mcc.id")]),
+                              col = list(Type = c(Cell_line="lightgrey", Tumor="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2))
+
+# cluster rows/cols
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column_crispr,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors)
+draw(ht + ha_row)
+
+# don't cluster rows/cols
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column_crispr,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors,
+             cluster_columns = FALSE,
+             column_order = seq_len(ncol(dat.orig)),
+             cluster_rows = FALSE)
+draw(ht + ha_row)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-orf-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c('png', 'pdf')}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,][c(rP, rN),]
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column_crispr,
+             row_names_gp = gpar(fontsize = 3),
+             col = ecolors)
+draw(ht + ha_row)
+
+# don't cluster rows/cols
+ht = Heatmap(mat, name = "VS", 
+             top_annotation = ha_column_crispr,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors,
+             cluster_columns = FALSE,
+             column_order = seq_len(ncol(dat.orig)),
+             cluster_rows = FALSE)
+draw(ht + ha_row)
+```
+
 
 
 # MCC Polyomavirus
