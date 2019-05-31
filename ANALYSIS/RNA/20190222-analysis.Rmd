@@ -1102,7 +1102,7 @@ Next, we'll create a heatmap of these genes of interest, first for log2 normaliz
 counts:
 
 
-```{r heatmap-orf-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('png', 'pdf')}
+```{r heatmap-crispr-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('png', 'pdf')}
 x <- which(rowData(dat.orig)$crispr %in% c("Top", "Bottom"))
 rN <- match(crispr$`Top Hits`, rowData(dat.orig)$symbol[x])
 rN <- rN[!is.na(rN)]
@@ -1149,7 +1149,7 @@ draw(ht + ha_row)
 
 Next for vs-transformed counts.
 
-```{r heatmap-orf-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c('png', 'pdf')}
+```{r heatmap-crispr-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c('png', 'pdf')}
 # subset counts of transformed (and normalized) counts
 mat <- assay(vst(dat.orig))[x,][c(rP, rN),]
 rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
