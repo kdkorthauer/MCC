@@ -304,7 +304,23 @@ Now we're ready to compute distances.
 d <- dist(t(mat_maf), method = "binary")
 plot(hclust(d))
 ```
+# Lollipop plot for ERAP1 mutations
 
+We are interested in characterizing the location and consequence of the mutations in 
+ERAP1.
+
+```{r lollipop-erap, fig.height = 4, fig.width = 6, fig.path="plots/", dev="png"}
+# list genes with mutation in ERAP1
+erap <- subsetMaf(maf = maf_all, genes = c('ERAP1'), mafObj = FALSE)
+erap
+
+write.table(erap, quote=FALSE, file = "plots/erap_mutations.txt", sep = "\t", row.names = FALSE)
+
+# plot
+pdf("plots/lollipop-erap.pdf", width = 10, height = 3)
+lollipopPlot(maf = maf_all, gene = 'ERAP1',  showMutationRate = TRUE)
+dev.off()
+```
 # Session Information
 
 ```{r}
