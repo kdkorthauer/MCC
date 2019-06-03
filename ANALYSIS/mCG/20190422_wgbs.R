@@ -143,11 +143,13 @@ prom = promoters(tx)
 
 
 x <- org.Hs.egSYMBOL
-# Get the gene symbol that are mapped to an entrez gene identifiers
+# Get the gene symbols that are mapped to an entrez gene identifiers
 mapped_genes <- mappedkeys(x)
 # Convert to a list
 xx <- as.list(x[mapped_genes])
-names(prom) <- unlist(xx[names(prom)])
+np <- xx[names(prom)]
+np[which(lengths(np) == 0)] <- NA
+names(prom) <- unlist(np)
 seqlevelsStyle(prom) <- "NCBI"
 prom = unlist(prom[names(prom) %in% goi$symbol])
 prom$symbol <- names(prom)
@@ -383,9 +385,33 @@ pdf(heatmap.file)
    draw(ht + ha_row)
 dev.off()
 
-# traceplot meth colored by viral status
+# traceplot meth colored by viral status and ifng status
+annoTrack <- getAnnot("hg38")
+seqlevelsStyle(bs) <- "UCSC"
+seqlevelsStyle(prom) <- "UCSC"
+prom <- prom[seqnames(prom) %in% seqlevels(bs)]
 
- 
-# traceplot meth colored by ifng status
+pdf(file.path(out.dir, "mCG_traceplots.pdf"), height = 3.5)
+for (gene in rownames(averagedSignal)){
+  prom.gene <- prom[prom$symbol == gene]
+  prom.gene <- reduce(resize(prom.gene, width(prom.gene)+500, fix="center"))
+  for (p in seq_along(prom.gene)){ 
+    if (length(findOverlaps(prom.gene[p], bs)) > 0 &&
+    	length(findOverlaps(prom.gene[p], annoTrack[[2]])) > 0){
+     plotDMRs(bs, regions = prom.gene[p], testCovariate = "virus", 
+      qval = FALSE, stat = FALSE, 
+      main = gene, 
+      annoTrack=annoTrack)
+     plotDMRs(bs, regions = prom.gene[p], testCovariate = "ifng", 
+      qval = FALSE, stat = FALSE, 
+      main = gene,
+      annoTrack=annoTrack)
+   }else{
+    message("No CpGs with methylation data in promoter of ", 
+      gene)
+   }
+  }
+}
+dev.off()
 
 
