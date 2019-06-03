@@ -216,6 +216,52 @@ pdf(heatmap.file)
    draw(ht + ha_row)
 dev.off()
 
+# ordered by dmr signal in virus pos vs neg
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
+  )
+byGroupDiff <- abs(byGroupAvg[,1] - byGroupAvg[,2])
+diffRank <- order(byGroupDiff, decreasing = TRUE)
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$virus == "Positive"),
+                                which(pData(bs)$virus == "Negative")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_classI_orderedV.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
+# ordered by dmr signal in IFNg category
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "++")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "+")),
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "-"))
+  )
+byGroupDiff <- rowSums(cbind(abs(byGroupAvg[,1] - byGroupAvg[,2]),
+                     abs(byGroupAvg[,2] - byGroupAvg[,3]),
+                     abs(byGroupAvg[,1] - byGroupAvg[,3])))
+diffRank <- order(byGroupDiff, decreasing = TRUE)
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$ifng == "++"),
+                                which(pData(bs)$ifng == "+"),
+                                which(pData(bs)$ifng == "-")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_classI_orderedI.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
 # just class II
 y <- goi$description[x] == "Class II"
 ht = Heatmap(averagedSignal[y,-1], 
@@ -229,6 +275,53 @@ heatmap.file <- file.path(out.dir, "heatmap_classII.pdf")
 pdf(heatmap.file)
    draw(ht + ha_row)
 dev.off()
+
+# ordered by dmr signal in virus pos vs neg
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
+  )
+byGroupDiff <- abs(byGroupAvg[,1] - byGroupAvg[,2])
+diffRank <- order(byGroupDiff, decreasing = TRUE)
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$virus == "Positive"),
+                                which(pData(bs)$virus == "Negative")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_classII_orderedV.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
+# ordered by dmr signal in IFNg category
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "++")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "+")),
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "-"))
+  )
+byGroupDiff <- rowSums(cbind(abs(byGroupAvg[,1] - byGroupAvg[,2]),
+                     abs(byGroupAvg[,2] - byGroupAvg[,3]),
+                     abs(byGroupAvg[,1] - byGroupAvg[,3])))
+diffRank <- order(byGroupDiff, decreasing = TRUE)
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$ifng == "++"),
+                                which(pData(bs)$ifng == "+"),
+                                which(pData(bs)$ifng == "-")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_classII_orderedI.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
 
 # other
 y <- !(goi$description[x] %in% c("Class I", "Class II"))
@@ -244,7 +337,54 @@ pdf(heatmap.file)
    draw(ht + ha_row)
 dev.off()
 
+# ordered by dmr signal in virus pos vs neg
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
+  )
+byGroupDiff <- abs(byGroupAvg[,1] - byGroupAvg[,2])
+diffRank <- order(byGroupDiff, decreasing = TRUE)
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$virus == "Positive"),
+                                which(pData(bs)$virus == "Negative")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_other_orderedV.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
+# ordered by dmr signal in IFNg category
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "++")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "+")),
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "-"))
+  )
+byGroupDiff <- rowSums(cbind(abs(byGroupAvg[,1] - byGroupAvg[,2]),
+                     abs(byGroupAvg[,2] - byGroupAvg[,3]),
+                     abs(byGroupAvg[,1] - byGroupAvg[,3])))
+diffRank <- order(byGroupDiff, decreasing = TRUE)
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, col = ecolors,
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$ifng == "++"),
+                                which(pData(bs)$ifng == "+"),
+                                which(pData(bs)$ifng == "-")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_other_orderedI.pdf")
+pdf(heatmap.file)
+   draw(ht + ha_row)
+dev.off()
+
 # traceplot meth colored by viral status
+
  
 # traceplot meth colored by ifng status
 
