@@ -1189,7 +1189,7 @@ reference sequence for the MCC polyomavirus.
 
 if(file.exists(viralquant_file)){
  viral <- read.table(viralquant_file) %>%
-   mutate(sampleName = gsub("/n/irizarryfs01/kkorthauer/MCC/DATA/RNA/", "", V1),
+   mutate(sampleName = gsub("/n/irizarryfs01_backed_up/kkorthauer/MCC/DATA/RNA/", "", V1),
           sampleName = gsub("-", "\\.", gsub(".01.unmapped.virusmap.bam", "", sampleName)),
           dfci.id = gsub("\\.", "_", substr(sampleName, 1, 9)),
           type = ifelse(grepl("T", sampleName), "Tumor", "Cell_line")) %>%
