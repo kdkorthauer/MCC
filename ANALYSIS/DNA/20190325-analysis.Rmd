@@ -249,11 +249,13 @@ fabcolors = RColorBrewer::brewer.pal(n = 7,name = 'Set1')
 names(fabcolors) = c("320", "367", "277", "314", "301", "336", "350")
 typecols <- rev(c("black", "grey"))
 names(typecols) <- c("Cell Line", "Tumor")
-fabcolors = list(patient = fabcolors,
-                 type = typecols)
+virus <- c(pos = "#543005", neg = "#DFC27D")
+fabcolors = list(type = typecols,
+                 virus = virus,
+                 patient = fabcolors)
 
 oncoplot(maf = maf, top = 50,
-         clinicalFeatures = c('type', "patient"),
+         clinicalFeatures = c("type", "virus", "patient"),
          annotationColor = fabcolors,
          fontSize = 0.8) #, 
       #  sampleOrder = c("DFCI-5473-C-01", "DFCI-5473-T-01",
