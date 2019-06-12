@@ -572,7 +572,9 @@ ht = Heatmap(mat, name = "Distance\n(log2 Norm)",
              clustering_distance_rows=dt,
              clustering_distance_columns=dt)
 draw(ht)
+
 ```
+
 
 Next for variance-stabilizing transformed counts:
 
@@ -584,13 +586,48 @@ dt <- function(x){
 mat <- as.matrix(distsVS) # convert to matrix
 rownames(mat) <- colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", 
                                        gsub("_", " ", type))) 
-
+ha_right = rowAnnotation(df = data.frame(ID = colData(dat)[, c("mcc.id")]),
+                             col = list(ID = cols2),
+                             show_legend=FALSE)
 ht = Heatmap(mat, name = "Distance\n(VS)", 
              top_annotation = ha_column, col = colors,
+             right_annotation = ha_right,
              clustering_distance_rows=dt,
-             clustering_distance_columns=dt)
+             clustering_distance_columns=dt,
+             show_row_names = FALSE,
+             show_column_names = FALSE)
 draw(ht)
 ```
+
+Same as previous, but remove outlier sample
+
+```{r heatmap-dist-vs-no286, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png', 'pdf')}
+distsVS <- dist(t(assay(vsd)[,!grepl("5370", colnames(assay(vsd)))]))
+dt <- function(x){
+ return(as.dist(x))
+}
+mat <- as.matrix(distsVS) # convert to matrix
+rownames(mat) <- colnames(mat) <- with(colData(dat)[colData(dat)$mcc.id != "286",], paste0(mcc.id, " ", 
+                                       gsub("_", " ", type))) 
+ha_right = rowAnnotation(df = data.frame(ID = colData(dat)[colData(dat)$mcc.id != "286", c("mcc.id")]),
+                             col = list(ID = cols2),
+                             show_legend=FALSE)
+ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat)[colData(dat)$mcc.id != "286", c("type")],
+                                              Virus = colData(dat)[colData(dat)$mcc.id != "286", c("virus")],
+                                              ID = colData(dat)[colData(dat)$mcc.id != "286", c("mcc.id")]),
+                              col = list(Type = c(Cell_line="lightgrey", Tumor="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2))
+ht = Heatmap(mat, name = "Distance\n(VS)", 
+             top_annotation = ha_column, col = colors,
+             right_annotation = ha_right,
+             clustering_distance_rows=dt,
+             clustering_distance_columns=dt,
+             show_row_names = FALSE,
+             show_column_names = FALSE)
+draw(ht)
+```
+
 
 ## Highly variable genes 
 
