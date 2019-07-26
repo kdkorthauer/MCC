@@ -18,7 +18,7 @@ fi
 
 # call mutations - loop over all tumor / normal pairs 
 
-for id in 5350 5351 5367 5368 5369; do
+for id in 5350 5351 5367 5368 5369 5473 5474 MCC-001; do
 
 echo "Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
@@ -29,13 +29,16 @@ done
 
 ### wait until above is complete before running next steps...
 
-for id in 5350 5351 5367 5368 5369; do
+for id in 5350 5351 5367 5368 5369 5473 5474 MCC-001; do
 echo "Tumor vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
 export TUMOR_BAM=DFCI-${id}-T-01.bam
 
 sbatch -o ../slurm/${id}T-std.out -e ../slurm/${id}T-std.err call_mutations_single_mutect2.sh
 sleep 1 
+
+# no cell line for MCC-001
+if [ $id != "MCC-001" ]; then 
 
 echo "Cell line vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
@@ -47,25 +50,9 @@ fi
 
 sbatch -o ../slurm/${id}C-std.out -e ../slurm/${id}C-std.err call_mutations_single_mutect2.sh
 sleep 1 
-done
 
+fi
 
-# call mutations - no matched normal
-
-for id in 5473 5474; do
-echo "Tumor for ${id}"
-export NORMAL_BAM=
-export TUMOR_BAM=DFCI-${id}-T-01.bam
-
-sbatch -o ../slurm/${id}T-std.out -e ../slurm/${id}T-std.err call_mutations_single_mutect2.sh
-sleep 1 
-
-echo "Cell line for ${id}"
-export NORMAL_BAM=
-export TUMOR_BAM=DFCI-${id}-C-01.bam
-
-sbatch -o ../slurm/${id}C-std.out -e ../slurm/${id}C-std.err call_mutations_single_mutect2.sh
-sleep 1 
 done
 
 

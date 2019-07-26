@@ -2,16 +2,16 @@
 #SBATCH -J MCCdna
 #SBATCH -n 1
 #SBATCH -N 1
-#SBATCH -p shared,commons,serial_requeue
 #SBATCH --mem 40G
 #SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
 RESDIR=mutect2-gatk4-results
 mkdir -p $RESDIR
-GATK=/n/irizarryfs01_backed_up/kkorthauer/softwareTools/gatk
-
-module load jdk/1.8.0_45-fasrc01
+#GATK=/n/irizarryfs01_backed_up/kkorthauer/softwareTools/gatk
+GATK=""
+#module load jdk/1.8.0_45-fasrc01
+module load gatk
 module load samtools
   # gatk Mutect2 --help
 
@@ -34,6 +34,9 @@ if [ \( -f $RESDIR/DFCI-5351-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5367-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5368-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5369-N-01.vcf \) ] ; then
+if [ \( -f $RESDIR/DFCI-5473-N-01.vcf \) ] ; then
+if [ \( -f $RESDIR/DFCI-5474-N-01.vcf \) ] ; then
+if [ \( -f $RESDIR/DFCI-001-N-01.vcf \) ] ; then
 if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
  # use gatk3 to create PON - new version req splitting over all contigs 
  # see if there is a solution after 4.1.1 is released (should be late march 2019)
@@ -42,8 +45,15 @@ if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
  gatk CreateSomaticPanelOfNormals \
    -vcfs $RESDIR/DFCI-5367-N-01.vcf \
    -vcfs $RESDIR/DFCI-5368-N-01.vcf \
-   -vcfs $RESDIR/DFCI-5368-N-01.vcf \
+   -vcfs $RESDIR/DFCI-5369-N-01.vcf \
+   -vcfs $RESDIR/DFCI-5350-N-01.vcf \
+   -vcfs $RESDIR/DFCI-5351-N-01.vcf \
+   -vcfs $RESDIR/DFCI-5473-N-01.vcf \
+   -vcfs $RESDIR/DFCI-5474-N-01.vcf \
+   -vcfs $RESDIR/DFCI-001-N-01.vcf \
    -O $RESDIR/pon.vcf.gz
+fi
+fi
 fi
 fi
 fi
@@ -59,10 +69,10 @@ if [ \( -f $RESDIR/pon.vcf.gz \) ] ; then
 
 if [ ! -z "$NORMAL_BAM" ]; then
   # matched normal
-  $GATK/gatk Mutect2 \
+  gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-     -I /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$TUMOR_BAM \
-     -I /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$NORMAL_BAM \
+     -I /rafalab/keegan/MCC/DATA/DNA/$TUMOR_BAM \
+     -I /rafalab/keegan/MCC/DATA/DNA/$NORMAL_BAM \
      -tumor ${TUMOR_BAM%.*} \
      -normal ${NORMAL_BAM2%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
@@ -71,9 +81,9 @@ if [ ! -z "$NORMAL_BAM" ]; then
      -O $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf
 else
   # no matched normal
-  $GATK/gatk Mutect2 \
+  gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-     -I /n/irizarryfs01/kkorthauer/MCC/DATA/DNA/$TUMOR_BAM \
+     -I /rafalab/keegan/MCC/DATA/DNA/$TUMOR_BAM \
      -tumor ${TUMOR_BAM%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
      --panel-of-normals $RESDIR/pon.vcf.gz \
@@ -86,7 +96,7 @@ fi
 
 # filter variants
 if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf \) ] ; then
-  $GATK/gatk FilterMutectCalls \
+  gatk FilterMutectCalls \
     -V $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \
     -O $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf
 fi
