@@ -172,7 +172,7 @@ p2 <- df %>% filter(level == "Libsize") %>%
 
 plot_grid(p1, p2, rel_widths = c(0.7,0.6), nrow = 1)
 
-# t-test for difference between tumor and cell line
+# t-test for difference between IFNg and Naive
 t.test(df$proportion[df$level == "Zero"] ~ df$type[df$level ==  "Zero"])
 t.test(df$proportion[df$level == "Low"] ~ df$type[df$level ==  "Low"])
 ```
@@ -251,8 +251,7 @@ ggsave(file.path("plots", "normcounts_ridgeplot.pdf"), width = 7, height = 3)
 ## Housekeeping genes
 
 As an alternative to DEseq size factor normalization, we'll also try out normalizing
-using a set of housekeeping genes, as the difference in the number of expressed genes
-between tumor and cell lines is quite large and could be a confounding factor. First 
+using a set of housekeeping genes. First 
 we need to map these
 gene symbols to ENSEMBL ids. We'll do this using the Bioconductor package 
 org.Hs.eg.db
@@ -957,6 +956,59 @@ ht = Heatmap(mat, name = "VS counts",
 draw(ht + ha_row)
 ```
 
+## Subset of genes for Patrick
+
+We'll repeat with the pared-down list of immune genes sent by Patrick via the Dropbox folder ("RNA-Seq and WGBS Gene Set for Class I APM.xlsx").
+
+
+```{r}
+goi <- read_xlsx("../RNA-Seq and WGBS Gene Set for Class I APM.xlsx", col_names=FALSE)
+colnames(goi) <- c("symbol")
+
+symbol <- goi$symbol
+```
+
+The following gene symbols from this list are not found in the transcriptome set: `r 
+symbol[which(!(symbol %in% rowData(dat.orig)$symbol ))]`. 
+
+After a quick search, we'll add in *PDIA2* and *CANX* to represent these symbols. 
+
+```{r heatmap-goi-l2n-patrick, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
+
+symbol <- c(goi$symbol, "PDIA2", "CANX")
+
+# indices of genes of interest and extra HLA genes
+x <- which(rowData(dat.orig)$symbol %in% symbol)      
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors)
+draw(ht)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-goi-vs-patrick, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,]
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors)
+draw(ht)
+```
+
+
+
 # Characterizing ORF screen genes of interest
 
 First we read in the spreadsheet from Patrick with the top 100 positive and negative gene hits for the ORF screen.
@@ -1413,7 +1465,22 @@ dat <- DESeq(dat)
 res <- results(dat)
 vsd = vst(dat)
 
-sum(res$padj < 0.01, na.rm = TRUE)
+sum(res$padj < 0.01, na.rm = TRUE) 
+res$ensemblID <- rownames(res)
+res$symbol <- rowData(dat)$symbol
+
+# print these results to a table:
+write.table(res[res$padj < 0.01,],
+    file = file.path("results", "DE_0.01_IFNg.txt"),
+    quote=FALSE,
+    row.names = FALSE,
+    sep = "\t")
+
+write.table(res[res$padj < 0.05,],
+    file = file.path("results", "DE_0.05_IFNg.txt"),
+    quote=FALSE,
+    row.names = FALSE,
+    sep = "\t")
 
 data.frame(res) %>%  
   filter(!is.na(padj)) %>% 
@@ -1530,7 +1597,7 @@ plotGseaTable(goSets[mainPathways], stats, goRes,
 ### Overlap with immune Genes of Interest
 
 Here we examine the fold changes and significance of differential expression between
-the tumor and cell lines for the genes of interest.
+the IFNg and Naive treatments for the genes of interest.
 
 ```{r}
 df <- data.frame(res) %>%  
@@ -1586,8 +1653,7 @@ ggsave(file.path("plots", "volcano_de01_goi.pdf"), plot = p, width = 7, height =
 ## Difference between viral positive and negative
 
 We'll use DESeq2 to perform standard differential expression between the 
-viral positive and viral negative samples. We'll include cell line / tumor
-origin as a covariate.
+viral positive and viral negative samples. We'll include IFNg treatment as a covariate.
 
 ```{r volcanoviral, fig.path='plots/', dev=c("png")}
 design(dat) <- ~ W + type + virus
@@ -1715,7 +1781,7 @@ plotGseaTable(goSets[mainPathways], stats, goRes,
 ### Overlap with immune Genes of Interest
 
 Here we examine the fold changes and significance of differential expression between
-the tumor and cell lines for the genes of interest.
+the viral positive and negative lines for the genes of interest.
 
 ```{r}
 df <- data.frame(res) %>%  
