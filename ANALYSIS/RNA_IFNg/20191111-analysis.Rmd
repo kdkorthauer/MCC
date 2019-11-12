@@ -1478,13 +1478,9 @@ goSets <- with(goSets, split(go_id, ensembl_gene_id))
 Now we'll perform the GSEA with fgsea
 
 ```{r}
-res2 <- res
-res2$log2FoldChange <- -1*res2$log2FoldChange
-res2$stat <- -1*res2*stat
-
 gsea_file <- file.path("results", "gsea.rds")
 goSets <- split(rep(names(goSets), lengths(goSets)), unlist(goSets))
-stats <- res2$stat
+stats <- res$stat
 names(stats) <- unlist(lapply(strsplit(rownames(res), "\\."), 
 				                       function(x) x[1]))
 stats <- stats[!is.na(stats)]
