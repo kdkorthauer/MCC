@@ -337,7 +337,7 @@ meanSdPlot(assay(vsd))
 
 Pairs scatterplot of all samples
 
-```{r pairscatter, fig.width = 11, fig.height = 10, fig.path='plots/', dev = c('pdf')}
+```{r pairscatter, fig.width = 11, fig.height = 10, fig.path='plots/', dev = c('png')}
 my_fn <- function(data, mapping, ...){
       p <- ggplot(data = data, mapping = mapping) + 
         #stat_density2d(aes(fill=..density..), geom="tile", contour = FALSE, n = 100) +
@@ -566,7 +566,7 @@ plotpairs(mat,
 Now we'll plot the distances in a heatmap, first for log2 normalized counts:
 
 
-```{r heatmap-dist-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-dist-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 dists <- dist(t(log2(counts(dat, normalize = TRUE)+1)))
 dt <- function(x){
  return(as.dist(x))
@@ -596,7 +596,7 @@ draw(ht)
 
 Next for variance-stabilizing transformed counts:
 
-```{r heatmap-dist-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-dist-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 distsVS <- dist(t(assay(vsd)))
 dt <- function(x){
  return(as.dist(x))
@@ -622,7 +622,7 @@ draw(ht + ha_right)
 
 Next we'll use only a smaller set of variable genes. First for log2 normalized counts:
 
-```{r heatmap-dist-var-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-dist-var-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 # rank variable genes:
 top <- rank(-rowVars(counts(dat)), ties.method = "first")
 
@@ -642,7 +642,7 @@ draw(ht)
 
 Next for variance-stabilizing transformed counts:
 
-```{r heatmap-dist-var-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-dist-var-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 # rank variable genes:
 top <- rank(-rowVars(assay(vsd)), ties.method = "first")
 
@@ -666,7 +666,7 @@ Here we'll create a heatmap of genes (rows) by samples (columns) of the most
 highly variable genes (instead of the distance as done in the previous 
 subsections). First for log2 normalized counts:
 
-```{r heatmap-expr-var-100-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-expr-var-100-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 # Calculate distances using transformed (and normalized) counts
 # only for top 100 genes
 mat <- log2(counts(dat, normalize = TRUE)[top <= 100,]+1)
@@ -684,7 +684,7 @@ draw(ht)
 
 Next for variance-stabilizing transformed counts:
 
-```{r heatmap-expr-var-100-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-expr-var-100-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 # Calculate distances using transformed (and normalized) counts
 # only for top 100 genes
 mat <- assay(vsd)[top <= 100,]
@@ -701,7 +701,7 @@ draw(ht)
 
 This time, just for viral positive samples
 
-```{r heatmap-expr-var-100-vs-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-expr-var-100-vs-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 dat_p <- dat[, c(which(colData(dat)$virus == "pos"))]
 vsd_p = vst(dat_p)
 
@@ -728,7 +728,7 @@ draw(ht)
 
 And now the same for viral negative samples:
         
-```{r heatmap-expr-var-100-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-expr-var-100-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 dat_n <- dat[, c(which(colData(dat)$virus %in% "neg"))]
 vsd_n = vst(dat_n)
 
@@ -839,7 +839,7 @@ Next, we'll create a heatmap of these genes of interest, first for log2 normaliz
 counts:
 
 
-```{r heatmap-goi-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-goi-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
 # indices of genes of interest and extra HLA genes
 x <- which(rowData(dat)$symbol %in% goi$symbol)      
 
@@ -863,7 +863,7 @@ draw(ht + ha_row)
 
 Next for vs-transformed counts.
 
-```{r heatmap-goi-vs, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-goi-vs, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
 # subset counts of transformed (and normalized) counts
 mat <- assay(vsd)[x,]
 rownames(mat) <- rowData(dat)$symbol[x]
@@ -920,7 +920,7 @@ Next, we'll create a heatmap of these genes of interest, first for log2 normaliz
 counts:
 
 
-```{r heatmap-goi-l2n-lucas, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-goi-l2n-lucas, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
 # indices of genes of interest and extra HLA genes
 x <- which(rowData(dat.orig)$symbol %in% goi$symbol)      
 
@@ -944,7 +944,7 @@ draw(ht + ha_row)
 
 Next for vs-transformed counts.
 
-```{r heatmap-goi-vs-lucas, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-goi-vs-lucas, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
 # subset counts of transformed (and normalized) counts
 mat <- assay(vst(dat.orig))[x,]
 rownames(mat) <- rowData(dat.orig)$symbol[x]
@@ -1049,7 +1049,7 @@ Next, we'll create a heatmap of these genes of interest, first for log2 normaliz
 counts:
 
 
-```{r heatmap-orf-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-orf-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
 x <- which(rowData(dat.orig)$orf %in% c("Negative", "Positive"))
 rN <- match(orf$`Negative Hits`, rowData(dat.orig)$symbol[x])
 rN <- rN[!is.na(rN)]
@@ -1086,7 +1086,7 @@ draw(ht + ha_row)
 
 Next for vs-transformed counts.
 
-```{r heatmap-orf-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-orf-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c("png")}
 # subset counts of transformed (and normalized) counts
 mat <- assay(vst(dat.orig))[x,][c(rP, rN),]
 rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
@@ -1193,7 +1193,7 @@ Next, we'll create a heatmap of these genes of interest, first for log2 normaliz
 counts:
 
 
-```{r heatmap-crispr-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-crispr-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c("png")}
 x <- which(rowData(dat.orig)$crispr %in% c("Top", "Bottom"))
 rN <- match(crispr$`Top Hits`, rowData(dat.orig)$symbol[x])
 rN <- rN[!is.na(rN)]
@@ -1230,7 +1230,7 @@ draw(ht + ha_row)
 
 Next for vs-transformed counts.
 
-```{r heatmap-crispr-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-crispr-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c("png")}
 # subset counts of transformed (and normalized) counts
 mat <- assay(vst(dat.orig))[x,][c(rP, rN),]
 rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
@@ -1298,7 +1298,7 @@ if(file.exists(viralquant_file)){
 
 Here we use the `Gviz` package to visualize the alignment of the reads that map to the MCC viral genome. 
 
-```{r track1, fig.height=8, fig.path='plots/', dev=c("pdf", "png"), eval=TRUE}
+```{r track1, fig.height=8, fig.path='plots/', dev=c("png"), eval=TRUE}
 coverageTracks <- list.files(path = "/rafalab/keegan/MCC/DATA/RNA_IFNg/", 
                              pattern = ".bedGraph",
                              full.names = TRUE)
@@ -1372,7 +1372,7 @@ int
 
 Add these to the coverage track:
 
-```{r track2, fig.height=8, fig.path='plots/', dev=c("pdf", "png"), eval=TRUE}
+```{r track2, fig.height=8, fig.path='plots/', dev=c("png"), eval=TRUE}
 mcols(int)$symbol <- c("1", "2")
 grtrack <- GeneRegionTrack(int, name = "highly expr")
 track <- c(track, grtrack)
@@ -1430,7 +1430,7 @@ There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01.
 `r sum(res$padj < 0.01 & abs(res$log2FoldChange) > 2, na.rm = TRUE)` also have log2 fold change of at least 2. 
 Here is a heatmap of those genes, first for log2 normalized counts:
 
-```{r heatmap-DE-l2n-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-DE-l2n-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & abs(res$log2FoldChange) > 2 & !is.na(res$padj), ] + 1)
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
@@ -1445,7 +1445,7 @@ draw(ht)
 
 Next for vs-transformed counts.
 
-```{r heatmap-DE-vs-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-DE-vs-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 mat <- assay(vsd)[res$padj < 0.01 & abs(res$log2FoldChange) > 2 & !is.na(res$padj), ]
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
@@ -1504,7 +1504,7 @@ sum(goRes[, padj < 0.05])
 
 Here we visualize the top pathways:
 
-```{r gsea, fig.width=8, fig.height=9, fig.path='plots/', dev=c("pdf", "png"), warning = FALSE, message = FALSE}
+```{r gsea, fig.width=8, fig.height=9, fig.path='plots/', dev=c("png"), warning = FALSE, message = FALSE}
 topPathwaysUp <- goRes[ES > 0][head(order(pval), n=10), pathway]
 topPathwaysDown <- goRes[ES < 0][head(order(pval), n=10), pathway]
 topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
@@ -1517,7 +1517,7 @@ plotGseaTable(goSets[topPathways], stats, goRes,
 Since many of these pathways are related and overlapping, we also try collapsing
 into independent pathways:
 
-```{r gsea-collapsed, fig.width=8, fig.height=9, fig.path='plots/', warning = FALSE, message = FALSE, dev=c("pdf", "png")}
+```{r gsea-collapsed, fig.width=8, fig.height=9, fig.path='plots/', warning = FALSE, message = FALSE, dev=c("png")}
 collapsedPathways <- collapsePathways(goRes[order(pval)][padj < 0.05], 
                                       goSets, stats)
 mainPathways <- goRes[pathway %in% collapsedPathways$mainPathways][
@@ -1571,7 +1571,7 @@ In particular, note that this quantity broken down by category is:
 
 We'll visualize the genes of interest on the volcano plot.
 
-```{r volcanogoi, fig.path='plots/', dev=c("pdf", "png")}
+```{r volcanogoi, fig.path='plots/', dev=c("png")}
 p <- ggplot(data = df, aes(log2FoldChange, pvalue, color = DE.01)) +
     geom_point(alpha = 0.4) +
     ylab("-log10(p-value)") + 
@@ -1589,7 +1589,7 @@ We'll use DESeq2 to perform standard differential expression between the
 viral positive and viral negative samples. We'll include cell line / tumor
 origin as a covariate.
 
-```{r volcanoviral, fig.path='plots/', dev=c("pdf", "png")}
+```{r volcanoviral, fig.path='plots/', dev=c("png")}
 design(dat) <- ~ W + type + virus
 dat <- DESeq(dat)
 
@@ -1614,7 +1614,7 @@ There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01.
 Here is a 
 heatmap of those genes, first for log2 normalized counts:
 
-```{r heatmap-DE-l2n-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-DE-l2n-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ] + 1)
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
@@ -1629,7 +1629,7 @@ draw(ht)
 
 Next for vs-transformed counts.
 
-```{r heatmap-DE-vs-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("pdf", "png")}
+```{r heatmap-DE-vs-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c("png")}
 mat <- assay(vsd)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ]
 colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
 
@@ -1687,7 +1687,7 @@ sum(goRes[, padj < 0.05])
 
 Here we visualize the top pathways:
 
-```{r gsea-viral, fig.width=8, fig.height=9, fig.path='plots/', dev=c("pdf", "png"), warning = FALSE, message = FALSE}
+```{r gsea-viral, fig.width=8, fig.height=9, fig.path='plots/', dev=c("png"), warning = FALSE, message = FALSE}
 topPathwaysUp <- goRes[ES > 0][head(order(pval), n=10), pathway]
 topPathwaysDown <- goRes[ES < 0][head(order(pval), n=10), pathway]
 topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
@@ -1702,7 +1702,7 @@ are highly related to the immune response.
 Since many of these pathways are related and overlapping, we also try collapsing
 into independent pathways:
 
-```{r gsea-collapsed-viral, fig.width=8, fig.height=9, fig.path='plots/', warning = FALSE, message = FALSE, dev=c("pdf", "png")}
+```{r gsea-collapsed-viral, fig.width=8, fig.height=9, fig.path='plots/', warning = FALSE, message = FALSE, dev=c("png")}
 collapsedPathways <- collapsePathways(goRes[order(pval)][padj < 0.05], 
                                       goSets, stats)
 mainPathways <- goRes[pathway %in% collapsedPathways$mainPathways][
@@ -1757,7 +1757,7 @@ In particular, note that this quantity broken down by category is:
 
 We'll visualize the genes of interest on the volcano plot.
 
-```{r volcanogoiviral, fig.path='plots/', dev=c("pdf", "png")}
+```{r volcanogoiviral, fig.path='plots/', dev=c("png")}
 p <- ggplot(data = df, aes(log2FoldChange, pvalue, color = DE.01)) +
     geom_point(alpha = 0.4) +
     ylab("-log10(p-value)") + 
