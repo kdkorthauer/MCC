@@ -1,0 +1,1778 @@
+---
+title: "MCC RNAseq - IFNg treatment"
+author: "Keegan Korthauer"
+output: 
+    html_document:
+        toc: true
+        toc_float: true
+        highlight: tango
+        number_sections: true
+        code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Summary
+
+Here we take a look at the expression (mRNA-seq) data from the cell lines treated with and without IFNg.
+
+# Workspace setup
+
+Here we'll load the necessary R packages.
+
+```{r, message = FALSE, warning = FALSE}
+library(ggplot2)
+theme_set(theme_bw())
+library(dplyr)
+library(tidyr)
+library(DESeq2)
+library(readr)
+library(readxl)
+library(RColorBrewer) 
+library(ComplexHeatmap) 
+library(vsn)
+library(fgsea)
+library(biomaRt)
+library(BiocParallel)
+library(GO.db)
+library(org.Hs.eg.db)
+library(ggrepel)
+library(Gviz)
+library(rtracklayer)
+library(RUVSeq)
+library(cowplot)
+library(ggridges)
+library(GGally)
+
+register(MulticoreParam(10))
+
+viralquant_file <- "../../PREPROCESS/RNA_IFNg/viral/virus.read.counts.txt"
+```
+
+Now we'll read in the RNA-seq count data, generated with Subread on the bam 
+files provided by the Broad's Firecloud (see the `../DATA` directory for the
+bam files and download scripts for Firecloud, and see the `../PREPROCESS` 
+directory for the count level data and scripts for generating from Rsubread. 
+We have saved a single file where each row is a feature and each column is a 
+sample:
+
+```{r}
+exp <- data.frame(read_tsv("../../PREPROCESS/RNA_IFNg/mRNA-Seq.counts.txt"))
+colnames(exp) <- gsub("X.rafalab.keegan.MCC.DATA.RNA.", "",
+                      colnames(exp))
+colnames(exp) <- gsub("IFNg..", "", colnames(exp))
+colnames(exp) <- gsub("DFCI.", "", colnames(exp))
+colnames(exp) <- gsub(".C|.CL", "", colnames(exp))
+colnames(exp) <- gsub(".02.bam", "_IFNg", colnames(exp))
+colnames(exp) <- gsub(".03.bam", "_Naive", colnames(exp))
+rownames(exp) <- exp[,1]
+rowDat <- exp[, c(1:6)]
+exp <- exp[, -c(1:6)]
+colDat <- data.frame(sampleName = colnames(exp),
+                     dfci.id = unlist(lapply(strsplit(colnames(exp), "_"), 
+                                             function(x) x[1])),
+                     type = unlist(lapply(strsplit(colnames(exp), "_"),
+                                          function(x) x[2])))
+colDat$type <- ifelse(grepl("IFNg", colDat$type), "IFNg", "Naive") 
+colDat
+colDat$type <- as.factor(colDat$type)
+
+table(colDat$dfci.id, colDat$type)
+```
+
+Here we have `r sum(rowSums(table(colDat$dfci.id, colDat$type)) == 2)` complete
+pairs of IFNg and naive treatments.
+
+We'll also add in the metadata from the de-identified excel file so we can map
+the Broad sample IDs back to the original MCC patient ids. Excel file doesn't 
+contain one observation per cell, so we'll have to manually enter the information.
+
+```{r}
+# 5350 -> 336
+# 5351 -> 350
+# 5367 -> 277
+# 5368 -> 2314
+# 5369 -> 301
+# 5370 -> 286
+# 5474 -> 367
+# 5473 -> 320
+# 5475 -> 290
+# 5476 -> 282
+# 5477 -> 275 
+# 5478 -> 358
+# 5481 -> 383
+
+id.map <- rbind(c(5350, 336),
+                c(5351, 350),
+                c(5367, 277),
+                c(5368, 2314),
+                c(5369, 301),
+                c(5370, 286),
+                c(5474, 367),
+                c(5473, 320),
+                c(5475, 290),
+                c(5476, 282),
+                c(5477, 275),
+                c(5478, 358),
+                c(5481, 383))
+id.map <- data.frame(id.map)
+colnames(id.map) <- c("id1", "id2")
+
+x <- match(as.character(colDat$dfci.id), 
+    as.character(id.map$id1))
+colDat$mcc.id <- as.factor(id.map$id2[x])
+
+viralneg <- c("286", "350", "290", "282", "320", "383")
+colDat$virus <- "pos"
+colDat$virus[colDat$mcc.id %in% viralneg] <- "neg"
+colDat$virus <- as.factor(colDat$virus)
+```
+
+Finally, we'll construct a DESeq dataset.
+
+```{r}
+dat <- DESeqDataSetFromMatrix(countData = exp,
+                              colData = colDat,
+                              rowData = rowDat,
+                              design = ~ type)
+```
+
+# Filtering and normalization
+
+Examine lowly expressed / undetected genes.
+
+```{r}
+dat <- estimateSizeFactors(dat)
+df <- data.frame(Zero = colSums(counts(dat) == 0)/nrow(dat),
+                 Low = colSums(counts(dat) < 5)/nrow(dat),
+                 Libsize = sizeFactors(dat))
+df <- df %>% mutate(sampleName = rownames(df)) %>%
+  gather(level, proportion, -sampleName) %>%
+  mutate(type = factor(ifelse(grepl("IFNg", sampleName), "IFNg", "Naive")))
+
+p1 <- df %>% filter(level != "Libsize") %>%
+  ggplot(aes(x = type, y = proportion, fill = type)) +
+    facet_grid( ~ level) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.05) +
+    theme(legend.position = "none") +
+    ggtitle("Proportion of lowly expressed genes")
+
+p2 <- df %>% filter(level == "Libsize") %>%
+  ggplot(aes(x = type, y = proportion, fill = type)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.05) +
+    ggtitle("Library Size") +
+    ylab("Library size")
+
+plot_grid(p1, p2, rel_widths = c(0.7,0.6), nrow = 1)
+
+# t-test for difference between tumor and cell line
+t.test(df$proportion[df$level == "Zero"] ~ df$type[df$level ==  "Zero"])
+t.test(df$proportion[df$level == "Low"] ~ df$type[df$level ==  "Low"])
+```
+
+First we'll remove features (genes) that have mean count across all samples 
+less than 1. These are considered not expressed.
+
+```{r}
+dat.orig <- dat
+filt <- which(rowMeans(counts(dat)) < 1)
+dat <- dat[ -filt, ]
+```
+
+## Size factor
+
+Next we'll estimate the library size factors.
+
+```{r}
+dat <- estimateSizeFactors(dat)
+dat.orig <- estimateSizeFactors(dat.orig)
+```
+
+Here are boxplots of raw and normalized counts:
+
+```{r}
+# raw
+data.frame(log(counts(dat)+1)) %>% gather("sampleName", "count", 1:ncol(dat)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
+ geom_boxplot() +
+ ggtitle("Raw counts") +
+ ylab("log(raw count + 1)")
+ggsave(file.path("plots", "rawcounts_boxplot.pdf"), width = 7, height = 3)
+
+# normalized (size factor) 
+data.frame(log(counts(dat, normalize = TRUE)+1)) %>% 
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
+ geom_boxplot() +
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)")
+ggsave(file.path("plots", "normcounts_boxplot.pdf"), width = 7, height = 3)
+```
+
+And ridge plots showing the same thing:
+
+```{r}
+# raw
+data.frame(log(counts(dat)+1)) %>% gather("sampleName", "count", 1:ncol(dat)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(y = mcc.id, x = count, group = sampleName, fill = type)) +
+ facet_wrap( ~ virus, scales = "free_y") +  
+ geom_density_ridges(scale = 0.9, alpha = 0.4)  +
+ ggtitle("Raw counts") +
+ xlab("log(raw count + 1)")
+ggsave(file.path("plots", "rawcounts_ridgeplot.pdf"), width = 7, height = 3)
+
+# normalized
+data.frame(log(counts(dat, normalized=TRUE)+1)) %>% gather("sampleName", "count", 1:ncol(dat)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(y = mcc.id, x = count, group = sampleName, fill = type)) +
+ facet_wrap( ~ virus, scales = "free_y") +  
+ geom_density_ridges(scale = 0.9, alpha = 0.4)  +
+ ggtitle("Normalized counts") +
+ xlab("log(normalized count + 1)")
+ggsave(file.path("plots", "normcounts_ridgeplot.pdf"), width = 7, height = 3)
+```
+
+## Housekeeping genes
+
+As an alternative to DEseq size factor normalization, we'll also try out normalizing
+using a set of housekeeping genes, as the difference in the number of expressed genes
+between tumor and cell lines is quite large and could be a confounding factor. First 
+we need to map these
+gene symbols to ENSEMBL ids. We'll do this using the Bioconductor package 
+org.Hs.eg.db
+
+```{r}
+map <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat), "\\."), 
+				                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat), "\\."), function(x) x[1])),
+           map$ENSEMBL)
+rowData(dat)$symbol <- map$SYMBOL[x]   
+
+# unfiltered
+map.orig <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat.orig), "\\."), 
+                                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat.orig), "\\."), function(x) x[1])),
+           map.orig$ENSEMBL)
+rowData(dat.orig)$symbol <- map.orig$SYMBOL[x]
+```
+
+Next we donwload the list of housekeeping genes.
+
+```{r}
+hkgenes <- read_tsv("https://www.tau.ac.il/~elieis/HKG/HK_genes.txt", 
+                    col_names = c("symbol", "id"))
+
+rowData(dat)$housekeeping <- rowData(dat)$symbol %in% hkgenes$symbol
+
+# plot of raw expression of hk genes
+data.frame(log(counts(dat)+1)) %>%
+ filter(rowData(dat)$housekeeping) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+  mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
+ geom_boxplot() +
+ ggtitle("Housekeeping genes") +
+ ylab("log(raw count + 1)")
+```
+
+Use these genes to normalize:
+
+```{r}
+set1 <- RUVg(counts(dat), rowData(dat)$housekeeping, k=1)
+colData(dat)$W = as.vector(set1$W)
+
+data.frame(log(set1$normalizedCounts+1)) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+  mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName") %>%
+ ggplot(aes(x = mcc.id, y = count, group = sampleName, fill = type)) +
+ facet_grid( ~ virus, scales = "free_x") +  
+ geom_boxplot() +
+ ggtitle("Housekeeping genes") +
+ ylab("log(normalized count + 1)")
+```
+
+# Unsupervised clustering
+
+Next we'll perform an unsupervised hierarchical clustering of the samples to 
+see if there are any similarities among the patients and sample types. The 
+heatmaps will be constructed using a distance matrix on variance stabilizing
+transformed expression values.
+
+## All genes
+
+We'll first carry out a variance stabilizing transformation, using all genes.
+
+```{r}
+# carry out the vs transformation:
+vsd = vst(dat)
+
+# plot variance
+meanSdPlot(assay(vsd))
+```
+
+Pairs scatterplot of all samples
+
+```{r pairscatter, fig.width = 11, fig.height = 10, fig.path='plots/', dev = c('pdf')}
+my_fn <- function(data, mapping, ...){
+      p <- ggplot(data = data, mapping = mapping) + 
+        #stat_density2d(aes(fill=..density..), geom="tile", contour = FALSE, n = 100) +
+        geom_hex(bins = 20) +
+        scale_fill_gradientn(colours = viridis::viridis(50)) +
+                               #colorRampPalette(c("white", blues9))(50)) +
+        geom_abline(intercept=0,slope=1, linetype = "dashed") +
+        scale_x_continuous(trans="log10") +
+        scale_y_continuous(trans="log10") +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+      p
+}
+
+my_corr <- function (data, mapping, alignPercent = 0.6, method = "pearson", 
+    use = "complete.obs", corAlignPercent = NULL, corMethod = NULL, 
+    corUse = NULL, ...) 
+{
+    if (!is.null(corAlignPercent)) {
+        stop("'corAlignPercent' is deprecated.  Please use argument 'alignPercent'")
+    }
+    if (!is.null(corMethod)) {
+        stop("'corMethod' is deprecated.  Please use argument 'method'")
+    }
+    if (!is.null(corUse)) {
+        stop("'corUse' is deprecated.  Please use argument 'use'")
+    }
+    useOptions <- c("all.obs", "complete.obs", "pairwise.complete.obs", 
+        "everything", "na.or.complete")
+    use <- pmatch(use, useOptions)
+    if (is.na(use)) {
+        warning("correlation 'use' not found.  Using default value of 'all.obs'")
+        use <- useOptions[1]
+    }
+    else {
+        use <- useOptions[use]
+    }
+    cor_fn <- function(x, y) {
+        cor(x, y, method = method, use = use)
+    }
+    xData <- eval_data_col(data, mapping$x)
+    yData <- eval_data_col(data, mapping$y)
+    if (GGally:::is_date(xData)) {
+        xData <- as.numeric(xData)
+    }
+    if (GGally:::is_date(yData)) {
+        yData <- as.numeric(yData)
+    }
+    colorData <- eval_data_col(data, mapping$colour)
+    if (is.numeric(colorData)) {
+        stop("ggally_cor: mapping color column must be categorical, not numeric")
+    }
+    if (use %in% c("complete.obs", "pairwise.complete.obs", "na.or.complete")) {
+        if (!is.null(colorData) && (length(colorData) == length(xData))) {
+            rows <- complete.cases(xData, yData, colorData)
+        }
+        else {
+            rows <- complete.cases(xData, yData)
+        }
+        if (any(!rows)) {
+            total <- sum(!rows)
+            if (total > 1) {
+                warning("Removed ", total, " rows containing missing values")
+            }
+            else if (total == 1) {
+                warning("Removing 1 row that contained a missing value")
+            }
+        }
+        if (!is.null(colorData) && (length(colorData) == length(xData))) {
+            colorData <- colorData[rows]
+        }
+        xData <- xData[rows]
+        yData <- yData[rows]
+    }
+    xVal <- xData
+    yVal <- yData
+    if (packageVersion("ggplot2") > "2.2.1") {
+        for (mappingName in names(mapping)) {
+            itemData <- eval_data_col(data, mapping[[mappingName]])
+            if (!inherits(itemData, "AsIs")) {
+                mapping[[mappingName]] <- NULL
+            }
+        }
+    }
+    else {
+        if (length(names(mapping)) > 0) {
+            for (i in length(names(mapping)):1) {
+                tmp_map_val <- deparse(mapping[names(mapping)[i]][[1]])
+                if (tmp_map_val[length(tmp_map_val)] %in% colnames(data)) 
+                  mapping[[names(mapping)[i]]] <- NULL
+                if (length(names(mapping)) < 1) {
+                  mapping <- NULL
+                  break
+                }
+            }
+        }
+    }
+    if (!is.null(colorData) && !inherits(colorData, "AsIs")) {
+        cord <- ddply(data.frame(x = xData, y = yData, color = colorData), 
+            "color", function(dt) {
+                cor_fn(dt$x, dt$y)
+            })
+        colnames(cord)[2] <- "correlation"
+        cord$correlation <- signif(as.numeric(cord$correlation), 
+            3)
+        lev <- levels(as.factor(colorData))
+        ord <- rep(-1, nrow(cord))
+        for (i in 1:nrow(cord)) {
+            for (j in seq_along(lev)) {
+                if (identical(as.character(cord$color[i]), as.character(lev[j]))) {
+                  ord[i] <- j
+                }
+            }
+        }
+        cord <- cord[order(ord[ord >= 0]), ]
+        cord$label <- str_c(cord$color, ": ", cord$correlation)
+        xmin <- min(xVal, na.rm = TRUE)
+        xmax <- max(xVal, na.rm = TRUE)
+        xrange <- c(xmin - 0.01 * (xmax - xmin), xmax + 0.01 * 
+            (xmax - xmin))
+        ymin <- min(yVal, na.rm = TRUE)
+        ymax <- max(yVal, na.rm = TRUE)
+        yrange <- c(ymin - 0.01 * (ymax - ymin), ymax + 0.01 * 
+            (ymax - ymin))
+        p <- ggally_text(label = str_c(signif(cor_fn(xVal, 
+            yVal), 2)), mapping = mapping, xP = 0.5, yP = 0.9, 
+            xrange = xrange, yrange = yrange, color = "black", 
+            ...) + theme(legend.position = "none", 
+                         panel.grid.major = element_blank()) 
+        xPos <- rep(alignPercent, nrow(cord)) * diff(xrange) + 
+            min(xrange, na.rm = TRUE)
+        yPos <- seq(from = 0.9, to = 0.2, length.out = nrow(cord) + 
+            1)
+        yPos <- yPos * diff(yrange) + min(yrange, na.rm = TRUE)
+        yPos <- yPos[-1]
+        cordf <- data.frame(xPos = xPos, yPos = yPos, labelp = cord$label)
+        cordf$labelp <- factor(cordf$labelp, levels = cordf$labelp)
+        p <- p + geom_text(data = cordf, aes(x = xPos, y = yPos, 
+            label = labelp, color = labelp), hjust = 1, ...) +
+            theme(panel.grid.major = element_blank())
+        p
+    }
+    else {
+        xmin <- min(xVal, na.rm = TRUE)
+        xmax <- max(xVal, na.rm = TRUE)
+        xrange <- c(xmin - 0.01 * (xmax - xmin), xmax + 0.01 * 
+            (xmax - xmin))
+        ymin <- min(yVal, na.rm = TRUE)
+        ymax <- max(yVal, na.rm = TRUE)
+        yrange <- c(ymin - 0.01 * (ymax - ymin), ymax + 0.01 * 
+            (ymax - ymin))
+        p <- ggally_text(label = paste(signif(cor_fn(xVal, 
+            yVal), 2), sep = "", collapse = ""), mapping, xP = 0.5, 
+            yP = 0.5, xrange = xrange, yrange = yrange, ...) + 
+            theme(legend.position = "none", panel.grid.major = element_blank())
+        p
+    }
+}
+
+plotpairs <- function(mat, main = ""){
+  p1 <- ggpairs(mat,
+                lower = list(continuous = my_fn),
+    upper = list(continuous = wrap(my_corr, size = 6, 
+                                   color = "black", method = "spearman")),
+    xlab = "Normalized Read Count", 
+    ylab = "Normalized Read Count",
+    title = main) + 
+    theme(axis.text.x = element_text(angle=90, hjust = 1))
+  p2 <- ggcorr(mat, label = TRUE, label_round = 2, limits = c(0.5, 1), 
+               midpoint = 0.75, name ="Spearman\nCorrelation", 
+               method = c("pairwise", "spearman"))
+  leg <- get_legend(p2) 
+  
+  g2 <- ggplotGrob(p2)
+  colors <- g2$grobs[[6]]$children[[3]]$gp$fill
+  
+  # Change background color to tiles in the upper triangular matrix of plots 
+  idx <- 1
+  p <- ncol(mat)
+  for (k1 in 1:(p-1)) {
+    for (k2 in (k1+1):p) {
+      plt <- getPlot(p1,k1,k2) +
+        theme(panel.background = element_rect(fill = colors[idx], color="white"),
+              panel.grid.major = element_line(color=colors[idx]))
+      p1 <- putPlot(p1,plt,k1,k2)
+      idx <- idx+1
+    }
+  }
+  
+  for (i in 1:p){ # log scale for the diagonal
+      p1[i,i] <- p1[i,i]+ scale_x_continuous(trans='log10')  
+  } 
+
+  
+  p1 <- plot_grid(ggmatrix_gtable(p1), leg, ncol=2, rel_widths = c(1, 0.2))
+  print(p1)
+}
+
+
+mat <- data.frame(counts(dat, normalize = TRUE)+1)
+x <- match(gsub("X|_IFNg|_Naive", "", colnames(mat)), id.map$id1)
+colnames(mat) <- paste0(ifelse(grepl("IFNg", colnames(mat)), "IFNg-", "Naive-"), id.map$id2[x])
+
+
+# just for IFNg
+plotpairs(mat[, grepl("IFNg", colnames(mat))], 
+          main = "Correlation of IFNg Samples")
+
+# just for Naive
+plotpairs(mat[, !grepl("IFNg", colnames(mat))], 
+          main = "Correlation of Naive Samples")
+
+# just for virus pos
+plotpairs(mat[, !grepl(paste0(viralneg, collapse = "|"), colnames(mat))], 
+          main = "Correlation of Virus+ Samples")
+
+# just for virus neg
+plotpairs(mat[, grepl(paste0(viralneg, collapse = "|"), colnames(mat))], 
+          main = "Correlation of Virus- Samples")
+
+# for everything
+plotpairs(mat, 
+          main = "Correlation of All Samples")
+
+```
+
+Now we'll plot the distances in a heatmap, first for log2 normalized counts:
+
+
+```{r heatmap-dist-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+dists <- dist(t(log2(counts(dat, normalize = TRUE)+1)))
+dt <- function(x){
+ return(as.dist(x))
+}
+mat <- as.matrix(dists) # convert to matrix
+rownames(mat) <- colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", 
+                                       gsub("_", " ", type))) 
+
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255) # set colors
+cols2 <-  colorRampPalette( rev(brewer.pal(length(unique(colData(dat)$mcc.id)), 
+                                           "Set3")) )(length(unique(colData(dat)$mcc.id)))
+names(cols2) <- unique(colData(dat)$mcc.id)
+ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat)[, c("type")],
+                                              Virus = colData(dat)[, c("virus")],
+                                              ID = colData(dat)[, c("mcc.id")]),
+                              col = list(Type = c(IFNg="lightgrey", Naive="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2))
+ht = Heatmap(mat, name = "Distance\n(log2 Norm)", 
+             top_annotation = ha_column, col = colors,
+             clustering_distance_rows=dt,
+             clustering_distance_columns=dt)
+draw(ht)
+
+```
+
+
+Next for variance-stabilizing transformed counts:
+
+```{r heatmap-dist-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+distsVS <- dist(t(assay(vsd)))
+dt <- function(x){
+ return(as.dist(x))
+}
+mat <- as.matrix(distsVS) # convert to matrix
+rownames(mat) <- colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", 
+                                       gsub("_", " ", type))) 
+ha_right = rowAnnotation(df = data.frame(ID = colData(dat)[, c("mcc.id")]),
+                             col = list(ID = cols2),
+                             show_legend=FALSE)
+ht = Heatmap(mat, name = "Distance\n(VS)", 
+             top_annotation = ha_column, col = colors,
+             #right_annotation = ha_right,
+             clustering_distance_rows=dt,
+             clustering_distance_columns=dt,
+             show_row_names = FALSE,
+             show_column_names = FALSE)
+draw(ht + ha_right)
+```
+
+
+## Highly variable genes 
+
+Next we'll use only a smaller set of variable genes. First for log2 normalized counts:
+
+```{r heatmap-dist-var-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+# rank variable genes:
+top <- rank(-rowVars(counts(dat)), ties.method = "first")
+
+# Calculate distances using transformed (and normalized) counts
+# only for top 250 genes
+dists <- dist(t(log2(counts(dat, normalize = TRUE)[top <= 250,]+1)))
+mat <- as.matrix(dists) # convert to matrix
+rownames(mat) <- colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", 
+                                       gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "Distance\n(log2 Norm)", 
+             top_annotation = ha_column, col = colors,
+             clustering_distance_rows=dt,
+             clustering_distance_columns=dt)
+draw(ht)
+```     
+
+Next for variance-stabilizing transformed counts:
+
+```{r heatmap-dist-var-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+# rank variable genes:
+top <- rank(-rowVars(assay(vsd)), ties.method = "first")
+
+# Calculate distances using transformed (and normalized) counts
+# only for top 250 genes
+distsVS <- dist(t(assay(vsd)[top <= 250,]))
+mat <- as.matrix(distsVS) # convert to matrix
+rownames(mat) <- colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", 
+                                       gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "Distance\n(VS)", 
+             top_annotation = ha_column, col = colors,
+             clustering_distance_rows=dt,
+             clustering_distance_columns=dt)
+draw(ht)
+```     
+
+## Visualize highly variable genes
+
+Here we'll create a heatmap of genes (rows) by samples (columns) of the most
+highly variable genes (instead of the distance as done in the previous 
+subsections). First for log2 normalized counts:
+
+```{r heatmap-expr-var-100-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+# Calculate distances using transformed (and normalized) counts
+# only for top 100 genes
+mat <- log2(counts(dat, normalize = TRUE)[top <= 100,]+1)
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ecolors <- c("white", colorRampPalette( (brewer.pal(9, "Reds")) )(255)) # set colors
+ht = Heatmap(mat, name = "log2\nNormalized\nCounts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+```     
+
+Next for variance-stabilizing transformed counts:
+
+```{r heatmap-expr-var-100-vs, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+# Calculate distances using transformed (and normalized) counts
+# only for top 100 genes
+mat <- assay(vsd)[top <= 100,]
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS Counts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+```     
+
+This time, just for viral positive samples
+
+```{r heatmap-expr-var-100-vs-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+dat_p <- dat[, c(which(colData(dat)$virus == "pos"))]
+vsd_p = vst(dat_p)
+
+cols2_p <-  colorRampPalette( rev(brewer.pal(length(unique(colData(dat_p)$mcc.id)), 
+                                           "Set3")) )(length(unique(colData(dat_p)$mcc.id)))
+names(cols2_p) <- unique(colData(dat_p)$mcc.id)
+ha_column_p = HeatmapAnnotation(df = data.frame(Type = colData(dat_p)[, c("type")],
+                                                ID = colData(dat_p)[, c("mcc.id")]),
+                               col = list(Type = c(IFNg="lightgrey", Naive="black"), 
+                                          ID = cols2_p))
+
+# Calculate distances using transformed (and normalized) counts
+# only for top 500 genes
+top <- rank(-rowVars(assay(vsd_p)), ties.method = "first")
+mat <- assay(vsd_p)[top <= 100,]
+colnames(mat) <- with(colData(dat_p), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column_p,
+             show_row_names = FALSE,
+             col = ecolors)
+draw(ht)
+```     
+
+And now the same for viral negative samples:
+        
+```{r heatmap-expr-var-100-vp, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+dat_n <- dat[, c(which(colData(dat)$virus %in% "neg"))]
+vsd_n = vst(dat_n)
+
+cols2_n <-  colorRampPalette( rev(brewer.pal(length(unique(colData(dat_n)$mcc.id)), 
+                                           "Set3")) )(length(unique(colData(dat_n)$mcc.id)))
+names(cols2_n) <- unique(colData(dat_n)$mcc.id)
+ha_column_n = HeatmapAnnotation(df = data.frame(Type = colData(dat_n)[, c("type")],
+                                                ID = colData(dat_n)[, c("mcc.id")]),
+                               col = list(Type = c(IFNg="lightgrey", Naive="black"), 
+                                          ID = cols2_n))
+
+# Calculate distances using transformed (and normalized) counts
+# only for top 500 genes
+top <- rank(-rowVars(assay(vsd_n)), ties.method = "first")
+mat <- assay(vsd_n)[top <= 100,]
+colnames(mat) <- with(colData(dat_n), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column_n,
+             show_row_names = FALSE,
+             col = ecolors)
+draw(ht)
+```     
+        
+        
+# Principal Components 
+
+Here we'll make a principal components plot as another view of how similar 
+the different samples are to one another.
+
+```{r}
+pcaData <- plotPCA(vsd, intgroup=c("type", "mcc.id"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=type, shape=mcc.id)) +
+  scale_shape_manual(values=1:nlevels(pcaData$mcc.id)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(file.path("plots", "pca_vscounts.pdf"), width = 5, height = 4)
+```        
+
+Now colored by viral status:
+
+```{r}
+pcaData <- plotPCA(vsd, intgroup=c("type", "mcc.id", "virus"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=virus, shape=mcc.id)) +
+  scale_shape_manual(values=1:nlevels(pcaData$mcc.id)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(file.path("plots", "pca_vscounts_viral.pdf"), width = 5, height = 4)
+```        
+
+And the same PCA plot constructed on the top 100 genes, for only the subset of
+samples that are virus positive:
+
+```{r}
+pcaData <- plotPCA(vsd_p, intgroup=c("type", "mcc.id"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=type, shape=mcc.id)) +
+  scale_shape_manual(values=1:nlevels(pcaData$mcc.id)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(file.path("plots", "pca_vscounts_subset.pdf"), width = 5, height = 4)
+```              
+
+Next for the virus-negative samples:
+
+```{r}
+pcaData <- plotPCA(vsd_n, intgroup=c("type", "mcc.id"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=type, shape=mcc.id)) +
+  scale_shape_manual(values=1:nlevels(pcaData$mcc.id)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(file.path("plots", "pca_vscounts_subset.pdf"), width = 5, height = 4)
+```              
+         
+# Characterizing immune genes of interest
+
+We'll investigate specific genes of interest, including HLA genes. The list of 
+genes is provided in a tab-delimited text file where the first column contains 
+gene symbols and the second contains a description.
+
+```{r}
+goi <- read_tsv("../genes_of_interest.txt", col_names = FALSE)
+colnames(goi) <- c("symbol", "description")
+```
+
+```{r}
+# add description to rowdata
+x <- which(rowData(dat)$symbol %in% goi$symbol)
+
+rowData(dat)$description <- NA
+for(g in x){
+  rowData(dat)$description[g] <- goi$description[goi$symbol == rowData(dat)$symbol[g]]
+}
+```
+
+Next, we'll create a heatmap of these genes of interest, first for log2 normalized
+counts:
+
+
+```{r heatmap-goi-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('pdf')}
+# indices of genes of interest and extra HLA genes
+x <- which(rowData(dat)$symbol %in% goi$symbol)      
+
+# subset normalized counts
+mat <- log2(counts(dat, normalize = TRUE)[x,] + 1)
+rownames(mat) <- rowData(dat)$symbol[x]
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+rowcol <- colorRampPalette( rev(brewer.pal(10, "Paired")) )(10)
+#rowcol <- rev(c("#8dd3c7", "#bebada", "#ffffb3", "#fb8072"))
+names(rowcol) <- sort(unique(rowData(dat)$description[!is.na(rowData(dat)$description)]))
+ha_row = rowAnnotation(df = data.frame(Category = rowData(dat)[x,"description"]),
+                       col = list(Category = rowcol))
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors)
+draw(ht + ha_row)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-goi-vs, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('pdf')}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vsd)[x,]
+rownames(mat) <- rowData(dat)$symbol[x]
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors)
+draw(ht + ha_row)
+```
+
+## Subset of genes for Lucas
+
+We'll investigate only Class I and Class II genes, with the addition of Polycomb and housekeeping genes provided by Lucas.
+
+```{r}
+goi <- read_tsv("../genes_of_interest.txt", col_names = FALSE)
+goi <- goi[,c(1:2)]
+colnames(goi) <- c("symbol", "description")
+
+# filter on just class I/II
+goi <- goi[goi$description %in% c("Class I", "Class II"),]
+```
+
+Add extra PcG and Housekeeping genes. Per Lucas' email 7/30/2019:
+>PcG: PCGF1, BCORL1, USP7, BCOR, ASXL1, BAP1, CXorf67
+>Housekeeping: ACTB, GAPDH
+
+```{r}
+goi <- rbind(goi,
+             c("PCGF1", "PcG"),
+             c("BCORL1", "PcG"),
+             c("USP7", "PcG"),
+             c("BCOR", "PcG"),
+             c("ASXL1", "PcG"),
+             c("BAP1", "PcG"),
+             c("C10orf67", "PcG"),
+             c("ACTB", "Housekeeping"),
+             c("GAPDH", "Housekeeping"))
+```
+
+```{r}
+# add description to rowdata
+x <- which(rowData(dat.orig)$symbol %in% goi$symbol)
+
+rowData(dat.orig)$description <- NA
+for(g in x){
+  rowData(dat.orig)$description[g] <- goi$description[goi$symbol == rowData(dat.orig)$symbol[g]]
+}
+```
+
+Next, we'll create a heatmap of these genes of interest, first for log2 normalized
+counts:
+
+
+```{r heatmap-goi-l2n-lucas, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('pdf')}
+# indices of genes of interest and extra HLA genes
+x <- which(rowData(dat.orig)$symbol %in% goi$symbol)      
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+rowcol <- colorRampPalette( rev(brewer.pal(4, "Paired")) )(4)
+#rowcol <- rev(c("#8dd3c7", "#bebada", "#ffffb3", "#fb8072"))
+names(rowcol) <- sort(unique(rowData(dat.orig)$description[!is.na(rowData(dat.orig)$description)]))
+ha_row = rowAnnotation(df = data.frame(Category = rowData(dat.orig)[x,"description"]),
+                       col = list(Category = rowcol))
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors)
+draw(ht + ha_row)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-goi-vs-lucas, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('pdf')}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,]
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors)
+draw(ht + ha_row)
+```
+
+# Characterizing ORF screen genes of interest
+
+First we read in the spreadsheet from Patrick with the top 100 positive and negative gene hits for the ORF screen.
+
+```{r}
+orf <- read_xlsx("../MCC-301 ORF Screen Gene List.xlsx")
+```
+
+
+```{r}
+# add description to rowdata
+x1 <- which(rowData(dat)$symbol %in% orf$'Negative Hits')
+x2 <- which(rowData(dat)$symbol %in% orf$'Positive Hits')
+
+rowData(dat)$orf <- "None"
+rowData(dat)$orf[x1] <- "Negative"
+rowData(dat)$orf[x2] <- "Positive"
+
+rowData(dat)$negative <- NA
+for(g in x1){
+  rowData(dat)$negative[g] <- orf$'Negative Hits'[orf$'Negative Hits' == rowData(dat)$symbol[g]]
+}
+
+rowData(dat)$positive <- NA
+for(g in x2){
+  rowData(dat)$positive[g] <- orf$'Positive Hits'[orf$'Positive Hits' == rowData(dat)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat, normalized=TRUE)+1)) %>% 
+ mutate(orf = rowData(dat)$orf) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = orf))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byORFstatus.pdf"), width = 9, height = 4)
+
+#### for all genes no filtering
+# add gene symbol to dat.orig
+map <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat.orig), "\\."), 
+				                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat.orig), "\\."), function(x) x[1])),
+           map$ENSEMBL)
+rowData(dat.orig)$symbol <- map$SYMBOL[x]   
+
+# add description to rowdata
+x1 <- which(rowData(dat.orig)$symbol %in% orf$'Negative Hits')
+x2 <- which(rowData(dat.orig)$symbol %in% orf$'Positive Hits')
+
+rowData(dat.orig)$orf <- "None"
+rowData(dat.orig)$orf[x1] <- "Negative"
+rowData(dat.orig)$orf[x2] <- "Positive"
+
+rowData(dat.orig)$negative <- NA
+for(g in x1){
+  rowData(dat.orig)$negative[g] <- orf$'Negative Hits'[orf$'Negative Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+rowData(dat.orig)$positive <- NA
+for(g in x2){
+  rowData(dat.orig)$positive[g] <- orf$'Positive Hits'[orf$'Positive Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat.orig, normalized=TRUE)+1)) %>% 
+ mutate(orf = rowData(dat.orig)$orf) %>%
+ gather("sampleName", "count", 1:ncol(dat.orig)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat.orig)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = orf))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byORFstatus_allgenes.pdf"), width = 9, height = 4)
+```
+
+Next, we'll create a heatmap of these genes of interest, first for log2 normalized
+counts:
+
+
+```{r heatmap-orf-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('pdf')}
+x <- which(rowData(dat.orig)$orf %in% c("Negative", "Positive"))
+rN <- match(orf$`Negative Hits`, rowData(dat.orig)$symbol[x])
+rN <- rN[!is.na(rN)]
+rP <- match(orf$`Positive Hits`, rowData(dat.orig)$symbol[x])
+rP <- rP[!is.na(rP)]
+
+# reorder cols
+dat.orig <- dat.orig[,  with(colData(dat.orig), order(type, virus, mcc.id))]
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,][c(rP, rN),] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+rowcol <- c("#8dd3c7", "#fb8072")
+names(rowcol) <- sort(unique(rowData(dat.orig)$orf[x][c(rP, rN)]))
+ha_row = rowAnnotation(df = data.frame(Category = rowData(dat.orig)[x,"orf"][c(rP,rN)]),
+                       col = list(Category = rowcol))
+
+ha_column_orf = HeatmapAnnotation(df = data.frame(Type = colData(dat.orig)[, c("type")],
+                                              Virus = colData(dat.orig)[, c("virus")],
+                                              ID = colData(dat.orig)[, c("mcc.id")]),
+                              col = list(Type = c(IFNg="lightgrey", Naive="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2))
+
+# cluster rows/cols
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column_orf,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors)
+draw(ht + ha_row)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-orf-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c('pdf')}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,][c(rP, rN),]
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column_orf,
+             row_names_gp = gpar(fontsize = 3),
+             col = ecolors)
+draw(ht + ha_row)
+
+```
+
+
+# Characterizing CRISPR screen genes of interest
+
+First we read in the spreadsheet from Patrick with the top and bottom 100 gene hits for the CRISPR screen.
+
+```{r}
+crispr <- read_xlsx("../MHC CRISPR Screen Top 100 Hits.xlsx", skip = 1, col_names = TRUE)
+```
+
+
+```{r}
+# add description to rowdata
+x1 <- which(rowData(dat)$symbol %in% crispr$'Top Hits')
+x2 <- which(rowData(dat)$symbol %in% crispr$'Bottom Hits')
+
+rowData(dat)$crispr <- "None"
+rowData(dat)$crispr[x1] <- "Top"
+rowData(dat)$crispr[x2] <- "Bottom"
+
+rowData(dat)$Top <- NA
+for(g in x1){
+  rowData(dat)$Top[g] <- crispr$'Top Hits'[crispr$'Top Hits' == rowData(dat)$symbol[g]]
+}
+
+rowData(dat)$Bottom <- NA
+for(g in x2){
+  rowData(dat)$Bottom[g] <- crispr$'Bottom Hits'[crispr$'Bottom Hits' == rowData(dat)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat, normalized=TRUE)+1)) %>% 
+ mutate(crispr = rowData(dat)$crispr) %>%
+ gather("sampleName", "count", 1:ncol(dat)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = crispr))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byCRISPRstatus.pdf"), width = 9, height = 4)
+
+#### for all genes no filtering
+# add gene symbol to dat.orig
+map <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat.orig), "\\."), 
+				                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat.orig), "\\."), function(x) x[1])),
+           map$ENSEMBL)
+rowData(dat.orig)$symbol <- map$SYMBOL[x]   
+
+# add description to rowdata
+x1 <- which(rowData(dat.orig)$symbol %in% crispr$'Top Hits')
+x2 <- which(rowData(dat.orig)$symbol %in% crispr$'Bottom Hits')
+
+rowData(dat.orig)$crispr <- "None"
+rowData(dat.orig)$crispr[x1] <- "Top"
+rowData(dat.orig)$crispr[x2] <- "Bottom"
+
+rowData(dat.orig)$Top <- NA
+for(g in x1){
+  rowData(dat.orig)$Top[g] <- crispr$'Top Hits'[crispr$'Top Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+rowData(dat.orig)$Bottom <- NA
+for(g in x2){
+  rowData(dat.orig)$Bottom[g] <- crispr$'Bottom Hits'[crispr$'Bottom Hits' == rowData(dat.orig)$symbol[g]]
+}
+
+df <- data.frame(log(counts(dat.orig, normalized=TRUE)+1)) %>% 
+ mutate(crispr = rowData(dat.orig)$crispr) %>%
+ gather("sampleName", "count", 1:ncol(dat.orig)) %>%
+ mutate(sampleName = gsub("X", "", sampleName)) %>%
+ left_join(data.frame(colData(dat.orig)), by = "sampleName")
+
+df %>%
+ ggplot(aes(x = mcc.id, y = count, fill = crispr))  +
+  geom_boxplot() +
+ facet_grid(type ~ .) +  
+ ggtitle("Normalized counts") +
+ ylab("log(normalized count + 1)") +
+ xlab("MCC id")
+ggsave(file.path("plots", "normcounts_boxplot_byCRISPRstatus_allgenes.pdf"), width = 9, height = 4)
+```
+
+Next, we'll create a heatmap of these genes of interest, first for log2 normalized
+counts:
+
+
+```{r heatmap-crispr-l2n, fig.width=8.5, fig.height=10, fig.path='plots/', dev=c('pdf')}
+x <- which(rowData(dat.orig)$crispr %in% c("Top", "Bottom"))
+rN <- match(crispr$`Top Hits`, rowData(dat.orig)$symbol[x])
+rN <- rN[!is.na(rN)]
+rP <- match(crispr$`Bottom Hits`, rowData(dat.orig)$symbol[x])
+rP <- rP[!is.na(rP)]
+
+# reorder cols
+dat.orig <- dat.orig[,  with(colData(dat.orig), order(type, virus, mcc.id))]
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,][c(rP, rN),] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+rowcol <- c("#8dd3c7", "#fb8072")
+names(rowcol) <- sort(unique(rowData(dat.orig)$crispr[x][c(rP, rN)]))
+ha_row = rowAnnotation(df = data.frame(Category = rowData(dat.orig)[x,"crispr"][c(rP,rN)]),
+                       col = list(Category = rowcol))
+
+ha_column_crispr = HeatmapAnnotation(df = data.frame(Type = colData(dat.orig)[, c("type")],
+                                              Virus = colData(dat.orig)[, c("virus")],
+                                              ID = colData(dat.orig)[, c("mcc.id")]),
+                              col = list(Type = c(IFNg="lightgrey", Naive="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2))
+
+# cluster rows/cols
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column_crispr,
+             row_names_gp = gpar(fontsize = 4),
+             col = ecolors)
+draw(ht + ha_row)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-crispr-vs, fig.width=9.5, fig.height=14, fig.path='plots/', dev=c('pdf')}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,][c(rP, rN),]
+rownames(mat) <- rowData(dat.orig)$symbol[x][c(rP, rN)]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column_crispr,
+             row_names_gp = gpar(fontsize = 3),
+             col = ecolors)
+draw(ht + ha_row)
+
+```
+
+
+
+# MCC Polyomavirus
+
+Here we quantify the presence of Merkel Cell Polyomavirus RNA, as well as visualize where it is located within the MCC genome. In addition, we are interested in identifying specific viral sequences that are highly expressed througout the virus positive samples.
+
+## Quantification of Viral RNA
+
+Here we examine the quantification of the number of reads mapping to viral RNA.
+This was carried out using the script in `../../PREPROCESS/RNA/viral/20181029-mapviral.sh`,
+which extracts unmapped reads from the RNA-seq bam files and aligns them to the 
+reference sequence for the MCC polyomavirus.
+
+```{r, viral}
+
+if(file.exists(viralquant_file)){
+ viral <- read.table(viralquant_file) %>%
+   mutate(sampleName = gsub("/rafalab/keegan/MCC/DATA/RNA_IFNg/", "", V1),
+          type = ifelse(grepl("-02", sampleName), "IFNg", "Naive"),
+          sampleName = gsub("-", "\\.", gsub(".02.unmapped.virusmap.bam|.03.unmapped.virusmap.bam", "", sampleName)),
+          dfci.id = gsub("DFCI\\.", "", substr(sampleName, 1, 9))) %>%
+   rename(V2 = "count") %>%
+   dplyr::select(-V1, -V3) %>%
+   mutate(sampleName = paste0(dfci.id, "_", type))
+   
+ colDat$sampleName <- gsub("\\.1", "", as.character(colDat$sampleName))
+ colDat$dfci.id <- as.character(colDat$dfci.id)
+ colDat$type <- as.character(colDat$type)
+ viral <- left_join(colDat, viral, by = c("sampleName", "dfci.id", "type")) %>%
+   mutate(count = ifelse(is.na(count), 0, count))
+
+ 
+ # normalize by size factors computed earlier  
+ sf <- data.frame(sf = sizeFactors(dat))
+ sf$sampleName <- rownames(sf) 
+ viral <- left_join(viral, sf, by = c("sampleName")) %>%
+   mutate(normcount = count / sf)
+ 
+ p <- ggplot(viral, aes(x = mcc.id, y = count, fill = type)) +
+   geom_col(position = "dodge") +
+   xlab("MCC ID") +
+   ylab("MCC Polyomavirus RNA count (normalized)")+
+   ggtitle("Reads mapping to viral RNA")
+ 
+ print(p)
+ 
+ ggsave(file.path("plots", "viralRNAcounts.pdf"), width = 5, height = 3.5)
+}
+```
+
+## Visualize alignment of MCC RNA
+
+Here we use the `Gviz` package to visualize the alignment of the reads that map to the MCC viral genome. 
+
+```{r track1, fig.height=8, fig.path='plots/', dev=c('pdf'), eval=TRUE}
+coverageTracks <- list.files(path = "/rafalab/keegan/MCC/DATA/RNA_IFNg/", 
+                             pattern = ".bedGraph",
+                             full.names = TRUE)
+covlist <- vector(mode="list", length(coverageTracks ))
+covlist <- GRangesList()
+track <- vector("list", length(coverageTracks)+1)
+
+nms <- list.files(path = "/rafalab/keegan/MCC/DATA/RNA_IFNg/", 
+                  pattern = ".bedGraph")
+nms <- sapply(strsplit(nms, "_unmapped_"), function(x) x[1])
+nms <- gsub("DFCI-", "", nms)
+nms <- gsub("-C-02|-CL-02", "_I", nms)
+nms <- gsub("-C-03|-CL-03", "_N", nms)
+names(track) <- nms
+
+viral <- unique(viral)
+viral$id <- viral$sampleName
+
+id.map <- colData(dat) %>% 
+           data.frame() %>%
+           dplyr::select(sampleName, mcc.id) %>%
+           mutate(id = gsub("IFNg", "I", sampleName)) %>%
+           mutate(id = gsub("Naive", "N", id))
+id.map$id <- gsub("\\.1", "", as.character(id.map$id))
+id.map$sampleName <- gsub("\\.1", "", as.character(id.map$sampleName))
+x <- match(names(track), id.map$id)
+id.map <- id.map %>%
+  mutate(mcc.id.type = paste0(mcc.id, "-", substr(id.map$sampleName, 6,6)))
+names(track) <- id.map$mcc.id.type[x]
+x <- match(id.map$id, gsub("FNg|aive", "", viral$id))
+id.map$virus_count <- viral$normcount[x]
+
+
+options(ucscChromosomeNames=FALSE)
+for (i in seq_along(coverageTracks)){
+  covlist[[i]] <- import.bedGraph(coverageTracks[i])
+  strand(covlist[[i]]) <- "+"
+  normfactor <- id.map$virus_count[id.map$mcc.id.type == names(track)[i]]
+  score(covlist[[i]]) <- score(covlist[[i]])/normfactor*1e3
+  if(length(covlist[[i]]) > 0)
+    track[[i]] <- DataTrack(covlist[[i]], name = names(track)[i])
+}
+
+track[[i+1]] <- GenomeAxisTrack(name = "MCC")
+names(track)[length(track)] <- "MCC"
+whichnull <- which(sapply(track, is.null))
+track <- track[-whichnull]
+covlist <- covlist[-whichnull]
+
+plotTracks(track, type="l" )
+```
+
+## Identify highly expressed MCC sequences
+
+Here we use the signal track objects from the previous section to find regions where the MCC expression is above some cutoff for all viral positive samples.
+
+```{r, eval=TRUE}
+peaks <- covlist
+for (i in seq_along(covlist)){
+  peaks[[i]] <- reduce(covlist[[i]][score(covlist[[i]]) > 50])
+  if (i == 1)
+    int <- peaks[[i]]
+  if (i > 1)
+    int <- intersect(int, peaks[[i]])
+}
+
+# highly expressed sequences in all V+ samples:
+int <- reduce(int, min.gapwidth = 10)
+int
+```
+
+Add these to the coverage track:
+
+```{r track2, fig.height=8, fig.path='plots/', dev=c('pdf'), eval=TRUE}
+mcols(int)$symbol <- c("1", "2")
+grtrack <- GeneRegionTrack(int, name = "highly expr")
+track <- c(track, grtrack)
+track <- track[c(1:(length(track)-2), length(track), length(track)-1)]
+
+plotTracks(track, type="l" )
+```
+
+Extract these two sequences from the MCC viral genome:
+
+```{r, eval=TRUE}
+require('seqinr')
+
+# Create objects
+mygenome <- read.fasta('../../PREPROCESS/RNA/viral/ref/mcc.fa')[[1]]
+mcols(int)$seq <- c('seq1','seq2')
+
+myseqs <- lapply(1:length(int), function(x) mygenome[start(int[x,]):end(int[x,])])
+
+# write to a file
+write.fasta(myseqs, mcols(int)$seq, 'results/highly_expressed_mcc_rna.fa')
+
+```
+
+
+# Differential expression
+
+Now we'll investigate differences in expression between IFNg and Naive treatments.
+
+## Difference between IFNg and Naive
+
+We'll use DESeq2 to perform standard differential expression between the IFNg and naive treatments. 
+
+```{r}
+design(dat) <- ~ W + virus + type
+dat <- DESeq(dat)
+
+res <- results(dat)
+vsd = vst(dat)
+
+sum(res$padj < 0.01, na.rm = TRUE)
+
+data.frame(res) %>%  
+  filter(!is.na(padj)) %>% 
+  mutate(pvalue = -log10(pvalue)) %>%
+  mutate(DE.01 = padj < 0.01) %>%
+  ggplot(aes(log2FoldChange, pvalue, color = DE.01)) +
+    geom_point(alpha=0.4) +
+    ylab("-log10(p-value)") + 
+    scale_colour_manual(values = c("black", "darkorange"))
+ggsave(file.path("plots", "volcano_de01.pdf"), width = 5, height = 4)
+```
+
+There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01. 
+`r sum(res$padj < 0.01 & abs(res$log2FoldChange) > 2, na.rm = TRUE)` also have log2 fold change of at least 2. 
+Here is a heatmap of those genes, first for log2 normalized counts:
+
+```{r heatmap-DE-l2n-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & abs(res$log2FoldChange) > 2 & !is.na(res$padj), ] + 1)
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+``` 
+
+Next for vs-transformed counts.
+
+```{r heatmap-DE-vs-0.01, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+mat <- assay(vsd)[res$padj < 0.01 & abs(res$log2FoldChange) > 2 & !is.na(res$padj), ]
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+``` 
+
+### GSEA
+
+To understand what groups of genes exist in this set, we'll perform a Gene-set
+Enrichment analysis. First we’ll use the biomaRt package to download and 
+associate GO annotations for each gene. 
+
+```{r gocat, message=FALSE}
+mart <- useMart("ensembl", "hsapiens_gene_ensembl")
+goSets <- getBM(c("ensembl_gene_id", "go_id"), mart = mart,
+				filters = "ensembl_gene_id", 
+				values = unlist(lapply(strsplit(rownames(res), "\\."), 
+				                       function(x) x[1])))
+desc <- Term(goSets$go_id)
+goSets$go_id <- paste0(goSets$go_id, " - ", desc)
+goSets <- goSets[!nchar( goSets$go_id ) == 0, ]
+goSets <- with(goSets, split(go_id, ensembl_gene_id))
+```
+
+Now we'll perform the GSEA with fgsea
+
+```{r}
+res2 <- res
+res2$log2FoldChange <- -1*res2$log2FoldChange
+res2$stat <- -1*res2*stat
+
+gsea_file <- file.path("results", "gsea.rds")
+goSets <- split(rep(names(goSets), lengths(goSets)), unlist(goSets))
+stats <- res2$stat
+names(stats) <- unlist(lapply(strsplit(rownames(res), "\\."), 
+				                       function(x) x[1]))
+stats <- stats[!is.na(stats)]
+overwrite <- TRUE
+
+if (!file.exists(gsea_file) || overwrite) {
+  goRes <- fgsea(goSets, 
+                  stats, 
+                  nperm=10000, 
+                  maxSize=500,
+                  minSize=5)  
+  saveRDS(goRes, file = gsea_file)
+} else {
+  goRes <- readRDS(gsea_file)
+}
+
+head(goRes[order(pval), ])
+sum(goRes[, padj < 0.05])
+```
+
+Here we visualize the top pathways:
+
+```{r gsea, fig.width=8, fig.height=9, fig.path='plots/', dev=c('pdf'), warning = FALSE, message = FALSE}
+topPathwaysUp <- goRes[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- goRes[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+plotGseaTable(goSets[topPathways], stats, goRes, 
+              gseaParam = 0.5,  
+              colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
+```
+
+
+Since many of these pathways are related and overlapping, we also try collapsing
+into independent pathways:
+
+```{r gsea-collapsed, fig.width=8, fig.height=9, fig.path='plots/', warning = FALSE, message = FALSE, dev=c('pdf')}
+collapsedPathways <- collapsePathways(goRes[order(pval)][padj < 0.05], 
+                                      goSets, stats)
+mainPathways <- goRes[pathway %in% collapsedPathways$mainPathways][
+                         order(-NES), pathway][1:20]
+plotGseaTable(goSets[mainPathways], stats, goRes, 
+              gseaParam = 0.5,
+              colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
+```
+
+### Overlap with immune Genes of Interest
+
+Here we examine the fold changes and significance of differential expression between
+the tumor and cell lines for the genes of interest.
+
+```{r}
+df <- data.frame(res) %>%  
+  mutate(description = rowData(dat)$description,
+         symbol = rowData(dat)$symbol) %>%
+  filter(!is.na(padj)) %>% 
+  mutate(pvalue = -log10(pvalue)) %>%
+  mutate(DE.01 = padj < 0.01)
+  
+knitr::kable((df %>% filter(!is.na(description)) %>% arrange(-pvalue))[,-c(1,3,4,5)])
+```
+
+`r sum(df$DE.01 & !is.na(df$description))` out of 
+`r sum(!is.na(df$description))` genes of interest (
+`r signif(100*sum(df$DE.01 & !is.na(df$description))/sum(!is.na(df$description)),3)`%) 
+are DE at the 0.01 FDR level. This is compared to 
+`r signif(100*sum(df$DE.01)/nrow(df),3)`% genes overall
+(`r sum(df$DE.01)` out of 
+`r nrow(df)`). 
+
+In particular, note that this quantity broken down by category is:
+
+* `r sum(df$DE.01 & df$description == "MCC Marker" & !is.na(df$description))` out of 
+`r sum(df$description == "MCC Marker" & !is.na(df$description))` MCC Marker genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "MCC Marker")/sum(df$description == "MCC Marker" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "MAPK Pathway" & !is.na(df$description))` out of 
+`r sum(df$description == "MAPK Pathway" & !is.na(df$description))` MAPK Pathway genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "MAPK Pathway")/sum(df$description == "MAPK Pathway" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "Class I" & !is.na(df$description))` out of 
+`r sum(df$description == "Class I" & !is.na(df$description))` Class I genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "Class I")/sum(df$description == "Class I" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "Class II" & !is.na(df$description))` out of 
+`r sum(df$description == "Class II" & !is.na(df$description))` Class II genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "Class II")/sum(df$description == "Class II" & !is.na(df$description)),3)`%)
+
+We'll visualize the genes of interest on the volcano plot.
+
+```{r volcanogoi, fig.path='plots/', dev=c('pdf')}
+p <- ggplot(data = df, aes(log2FoldChange, pvalue, color = DE.01)) +
+    geom_point(alpha = 0.4) +
+    ylab("-log10(p-value)") + 
+    scale_colour_manual(values = c("black", "darkorange")) +
+    geom_point(data = df %>% filter(!is.na(description)), color = "red") +
+    geom_label_repel(data = df %>% filter(!is.na(description)) %>% filter(DE.01), 
+               aes(label = symbol), color = "black", size = 3)
+p
+ggsave(file.path("plots", "volcano_de01_goi.pdf"), plot = p, width = 7, height = 5)
+```
+
+## Difference between viral positive and negative
+
+We'll use DESeq2 to perform standard differential expression between the 
+viral positive and viral negative samples. We'll include cell line / tumor
+origin as a covariate.
+
+```{r volcanoviral, fig.path='plots/', dev=c('pdf')}
+design(dat) <- ~ W + type + virus
+dat <- DESeq(dat)
+
+res <- results(dat)
+vsd = vst(dat)
+
+sum(res$padj < 0.01, na.rm = TRUE)
+
+data.frame(res) %>%  
+  filter(!is.na(padj)) %>% 
+  mutate(pvalue = -log10(pvalue)) %>%
+  mutate(DE.01 = padj < 0.01) %>%
+  ggplot(aes(log2FoldChange, pvalue, color = DE.01)) +
+    geom_point(alpha = 0.4) +
+    ylab("-log10(p-value)") + 
+    scale_colour_manual(values = c("black", "darkorange"))
+ggsave(file.path("plots", "volcano_de01_viral.pdf"), width = 5, height = 4)
+```
+
+There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01. 
+`r sum(res$padj < 0.01 & abs(res$log2FoldChange) > 2, na.rm = TRUE)` also have log2 fold change of at least 2. 
+Here is a 
+heatmap of those genes, first for log2 normalized counts:
+
+```{r heatmap-DE-l2n-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ] + 1)
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+``` 
+
+Next for vs-transformed counts.
+
+```{r heatmap-DE-vs-0.01-viral, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('pdf')}
+mat <- assay(vsd)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ]
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+``` 
+
+### GSEA
+
+To understand what groups of genes exist in this set, we'll perform a Gene-set
+Enrichment analysis. First we’ll use the biomaRt package to download and 
+associate GO annotations for each gene. 
+
+```{r gocat-viral, message=FALSE}
+mart <- useMart("ensembl", "hsapiens_gene_ensembl")
+goSets <- getBM(c("ensembl_gene_id", "go_id"), mart = mart,
+				filters = "ensembl_gene_id", 
+				values = unlist(lapply(strsplit(rownames(res), "\\."), 
+				                       function(x) x[1])))
+desc <- Term(goSets$go_id)
+goSets$go_id <- paste0(goSets$go_id, " - ", desc)
+goSets <- goSets[!nchar( goSets$go_id ) == 0, ]
+goSets <- with(goSets, split(go_id, ensembl_gene_id))
+```
+
+Now we'll perform the GSEA with fgsea
+
+```{r}
+gsea_file <- file.path("results", "gsea-viral.rds")
+goSets <- split(rep(names(goSets), lengths(goSets)), unlist(goSets))
+stats <- res$stat
+names(stats) <- unlist(lapply(strsplit(rownames(res), "\\."), 
+				                       function(x) x[1]))
+stats <- stats[!is.na(stats)]
+
+if (!file.exists(gsea_file) || overwrite) {
+  goRes <- fgsea(goSets, 
+                  stats, 
+                  nperm=10000, 
+                  maxSize=500,
+                  minSize=5)  
+  saveRDS(goRes, file = gsea_file)
+} else {
+  goRes <- readRDS(gsea_file)
+}
+
+head(goRes[order(pval), ])
+sum(goRes[, padj < 0.05])
+```
+
+Here we visualize the top pathways:
+
+```{r gsea-viral, fig.width=8, fig.height=9, fig.path='plots/', dev=c('pdf'), warning = FALSE, message = FALSE}
+topPathwaysUp <- goRes[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- goRes[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+plotGseaTable(goSets[topPathways], stats, goRes, 
+              gseaParam = 0.5,  
+              colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
+```
+
+The top categories that DE genes between viral positive and viral negative are overrepresented
+are highly related to the immune response. 
+
+Since many of these pathways are related and overlapping, we also try collapsing
+into independent pathways:
+
+```{r gsea-collapsed-viral, fig.width=8, fig.height=9, fig.path='plots/', warning = FALSE, message = FALSE, dev=c('pdf')}
+collapsedPathways <- collapsePathways(goRes[order(pval)][padj < 0.05], 
+                                      goSets, stats)
+mainPathways <- goRes[pathway %in% collapsedPathways$mainPathways][
+                         order(-NES), pathway][1:20]
+plotGseaTable(goSets[mainPathways], stats, goRes, 
+              gseaParam = 0.5,
+              colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
+```
+
+### Overlap with immune Genes of Interest
+
+Here we examine the fold changes and significance of differential expression between
+the tumor and cell lines for the genes of interest.
+
+```{r}
+df <- data.frame(res) %>%  
+  mutate(description = rowData(dat)$description,
+         symbol = rowData(dat)$symbol) %>%
+  filter(!is.na(padj)) %>% 
+  mutate(pvalue = -log10(pvalue)) %>%
+  mutate(DE.01 = padj < 0.01)
+  
+knitr::kable((df %>% filter(!is.na(description)) %>% arrange(-pvalue))[,-c(1,3,4,5)])
+
+```
+
+`r sum(df$DE.01 & !is.na(df$description))` out of 
+`r sum(!is.na(df$description))` genes of interest (
+`r signif(100*sum(df$DE.01 & !is.na(df$description))/sum(!is.na(df$description)),3)`%) 
+are DE at the 0.01 FDR level. This is compared to 
+`r signif(100*sum(df$DE.01)/nrow(df),3)`% genes overall
+(`r sum(df$DE.01)` out of 
+`r nrow(df)`). 
+
+In particular, note that this quantity broken down by category is:
+
+* `r sum(df$DE.01 & df$description == "MCC Marker" & !is.na(df$description))` out of 
+`r sum(df$description == "MCC Marker" & !is.na(df$description))` MCC Marker genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "MCC Marker")/sum(df$description == "MCC Marker" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "MAPK Pathway" & !is.na(df$description))` out of 
+`r sum(df$description == "MAPK Pathway" & !is.na(df$description))` MAPK Pathway genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "MAPK Pathway")/sum(df$description == "MAPK Pathway" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "Class I" & !is.na(df$description))` out of 
+`r sum(df$description == "Class I" & !is.na(df$description))` Class I genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "Class I")/sum(df$description == "Class I" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "Class II" & !is.na(df$description))` out of 
+`r sum(df$description == "Class II" & !is.na(df$description))` Class II genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "Class II")/sum(df$description == "Class II" & !is.na(df$description)),3)`%)
+
+We'll visualize the genes of interest on the volcano plot.
+
+```{r volcanogoiviral, fig.path='plots/', dev=c('pdf')}
+p <- ggplot(data = df, aes(log2FoldChange, pvalue, color = DE.01)) +
+    geom_point(alpha = 0.4) +
+    ylab("-log10(p-value)") + 
+    scale_colour_manual(values = c("black", "darkorange")) +
+    geom_point(data = df %>% filter(!is.na(description)), color = "red") +
+    geom_label_repel(data = df %>% filter(!is.na(description)) %>% filter(DE.01), 
+               aes(label = symbol), color = "black", size = 3)
+p
+ggsave(file.path("plots", "volcano_de01_goi_viral.pdf"), plot = p, width = 7, height = 5)
+```
+# Session Information
+
+```{r}
+sessionInfo()
+```
