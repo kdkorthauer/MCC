@@ -38,7 +38,7 @@ sbatch -o ../slurm/${id}T-std.out -e ../slurm/${id}T-std.err call_mutations_sing
 sleep 1 
 
 # no cell line for MCC-001
-if [ $id != "MCC-001" ]; then 
+if [ ! \( $id = "MCC-001" \) ]; then 
 
 echo "Cell line vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam

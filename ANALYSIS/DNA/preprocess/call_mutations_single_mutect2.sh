@@ -29,6 +29,7 @@ else
 fi
 
 # create somatic panel of normals
+# not really sure what GenomicsDBImport is doing; can't get it to work
 if [ \( -f $RESDIR/DFCI-5350-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5351-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5367-N-01.vcf \) ] ; then
@@ -36,21 +37,26 @@ if [ \( -f $RESDIR/DFCI-5368-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5369-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5473-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5474-N-01.vcf \) ] ; then
-if [ \( -f $RESDIR/DFCI-001-N-01.vcf \) ] ; then
+if [ \( -f $RESDIR/DFCI-MCC-001-N-01.vcf \) ] ; then
 if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
- # use gatk3 to create PON - new version req splitting over all contigs 
- # see if there is a solution after 4.1.1 is released (should be late march 2019)
- # https://github.com/broadinstitute/gatk/pull/5675
- module load gatk
+  
+  gatk GenomicsDBImport \
+   -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
+   -V $RESDIR/DFCI-5367-N-01.vcf \
+   -V $RESDIR/DFCI-5368-N-01.vcf \
+   -V $RESDIR/DFCI-5369-N-01.vcf \
+   -V $RESDIR/DFCI-5350-N-01.vcf \
+   -V $RESDIR/DFCI-5351-N-01.vcf \
+   -V $RESDIR/DFCI-5473-N-01.vcf \
+   -V $RESDIR/DFCI-5474-N-01.vcf \
+   -V $RESDIR/DFCI-MCC-001-N-01.vcf \
+   --genomicsdb-workspace-path pon_db \
+   --merge-input-intervals \
+   -L annotation/whole_exome_illumina_coding_v1.Homo_sapiens_assembly19.targets.interval_list
+
  gatk CreateSomaticPanelOfNormals \
-   -vcfs $RESDIR/DFCI-5367-N-01.vcf \
-   -vcfs $RESDIR/DFCI-5368-N-01.vcf \
-   -vcfs $RESDIR/DFCI-5369-N-01.vcf \
-   -vcfs $RESDIR/DFCI-5350-N-01.vcf \
-   -vcfs $RESDIR/DFCI-5351-N-01.vcf \
-   -vcfs $RESDIR/DFCI-5473-N-01.vcf \
-   -vcfs $RESDIR/DFCI-5474-N-01.vcf \
-   -vcfs $RESDIR/DFCI-001-N-01.vcf \
+   -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
+   -V gendb://pon_db \
    -O $RESDIR/pon.vcf.gz
 fi
 fi
@@ -60,6 +66,7 @@ fi
 fi
 fi
 fi
+fi 
 
 # run MuTect if output file does not already exist 
 # no af filter needed: https://gatkforums.broadinstitute.org/gatk/discussion/comment/57078
