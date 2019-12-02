@@ -1,8 +1,7 @@
 #!/bin/bash
-#SBATCH -J viralDNA
+#SBATCH -J viralRNA
 #SBATCH -n 1
 #SBATCH -N 1
-#SBATCH -p shared,commons,serial_requeue
 #SBATCH --mem 20G
 #SBATCH -t 0-5:00
 #SBATCH -o ../slurm/expl-%j.out
@@ -24,9 +23,10 @@ cd ..
 
 # pull out unmapped reads from original BAMs
 module load samtools
-module load bedtools2
+module load gcc/7.3.0
+module load bedtools
 
-for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*1.bam; do
+for i in /rafalab/keegan/MCC/DATA/RNA/*1.bam; do
     [ -f "$i" ] || break
     samp=$(basename $i .bam)
     pref=$(dirname $i)
@@ -37,7 +37,7 @@ done
 
 
 # realign unmapped reads to viral genomes
-for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*unmapped.bam; do
+for i in /rafalab/keegan/MCC/DATA/RNA/*unmapped.bam; do
     [ -f "$i" ] || break
     samp=$(basename $i .bam)
     pref=$(dirname $i)
@@ -52,7 +52,7 @@ done
 # 2. index bam 
 # 3. convert to bedGraph
 
-for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
+for i in /rafalab/keegan/MCC/DATA/RNA/*virusmap.bam; do
     samp=$(basename $i)
     pref=$(dirname $i)
     if [[ ! -e $pref/$samp\.sorted.bam ]]; then
@@ -70,7 +70,7 @@ done
 
 
 # query which samples had reads aligned to the mcc polyomav
-for i in /n/irizarryfs01/kkorthauer/MCC/DATA/RNA/*virusmap.bam; do
+for i in /rafalab/keegan/MCC/DATA/RNA/*virusmap.bam; do
     [ -f "$i" ] || break
     samtools view $i | cut -f3 | sort | uniq -c | awk -v i=$i '{print i"\t"$1"\t"$2}' >> virus.read.counts.txt
 done
