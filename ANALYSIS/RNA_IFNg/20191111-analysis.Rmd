@@ -956,9 +956,9 @@ ht = Heatmap(mat, name = "VS counts",
 draw(ht + ha_row)
 ```
 
-## Subset of genes for Patrick
+## Subset of Class I genes for Patrick
 
-We'll repeat with the pared-down list of immune genes sent by Patrick via the Dropbox folder ("RNA-Seq and WGBS Gene Set for Class I APM.xlsx").
+We'll repeat with the pared-down list of Class I genes sent by Patrick via the Dropbox folder ("RNA-Seq and WGBS Gene Set for Class I APM.xlsx").
 
 
 ```{r}
@@ -1003,6 +1003,58 @@ colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type
 ht = Heatmap(mat, name = "VS counts", 
              top_annotation = ha_column,
              row_names_gp = gpar(fontsize = 7),
+             col = ecolors)
+draw(ht)
+```
+
+
+## Subset of IFN genes for Patrick
+
+We'll repeat with a list of IFN genes sent by Patrick via email 11/14/2019 ("Reactome Interferon Signaling Gene List.txt").
+
+
+```{r}
+goi <- read.table("../Reactome Interferon Signaling Gene List.txt", header=TRUE)
+colnames(goi) <- c("symbol")
+
+symbol <- as.character(goi$symbol)
+```
+
+The following gene symbols from this list are not found in the transcriptome set: `r 
+symbol[which(!(symbol %in% rowData(dat.orig)$symbol ))]`. 
+
+After a quick search, we'll add in *NUP42* to represent *NUPL2*. Substitutions were not found for the others. 
+
+```{r heatmap-goi-l2n-patrickIFN, fig.width=8.5, fig.height=15, fig.path='plots/', dev=c("png")}
+
+symbol <- c(symbol, "NUP42")
+
+# indices of genes of interest and extra HLA genes
+x <- which(rowData(dat.orig)$symbol %in% symbol)      
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 5),
+             col = ecolors)
+draw(ht)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-goi-vs-patrickIFN, fig.width=8.5, fig.height=15, fig.path='plots/', dev=c("png")}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,]
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 5),
              col = ecolors)
 draw(ht)
 ```
