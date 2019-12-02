@@ -6,7 +6,7 @@
 #SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
-RESDIR=mutect2-gatk4-results
+RESDIR=mutect2-gatk4.1.2.0-results
 mkdir -p $RESDIR
 #GATK=/n/irizarryfs01_backed_up/kkorthauer/softwareTools/gatk
 module load gatk
@@ -30,6 +30,8 @@ if [ ! \( -f $RESDIR/$(basename $NORMAL_BAM .bam)\.vcf \) ] ; then
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
      -I /rafalab/keegan/MCC/DATA/DNA/$NORMAL_BAM \
      -tumor ${NORMAL_BAM2%.*} \
+     --max-mnp-distance 0 \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
+     -L annotation/whole_exome_illumina_coding_v1.Homo_sapiens_assembly19.targets.interval_list \
      -O $RESDIR/$(basename $NORMAL_BAM .bam)\.vcf
 fi

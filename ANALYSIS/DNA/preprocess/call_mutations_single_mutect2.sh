@@ -6,15 +6,16 @@
 #SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
-RESDIR=mutect2-gatk4-results
+RESDIR=mutect2-gatk4.1.2.0-results
 mkdir -p $RESDIR
 #GATK=/n/irizarryfs01_backed_up/kkorthauer/softwareTools/gatk
 GATK=""
 #module load jdk/1.8.0_45-fasrc01
 module load gatk
 module load samtools
+module load bcftools
+module load perl
   # gatk Mutect2 --help
-
 
 ################
 # build PoN
@@ -56,6 +57,7 @@ if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
 
  gatk CreateSomaticPanelOfNormals \
    -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
+   --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
    -V gendb://pon_db \
    -O $RESDIR/pon.vcf.gz
 fi
@@ -84,7 +86,7 @@ if [ ! -z "$NORMAL_BAM" ]; then
      -normal ${NORMAL_BAM2%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
      --panel-of-normals $RESDIR/pon.vcf.gz \
-     --genotype-germline-sites \
+     -L annotation/whole_exome_illumina_coding_v1.Homo_sapiens_assembly19.targets.interval_list \
      -O $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf
 else
   # no matched normal
@@ -94,19 +96,22 @@ else
      -tumor ${TUMOR_BAM%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
      --panel-of-normals $RESDIR/pon.vcf.gz \
-     --genotype-germline-sites \
+     -L annotation/whole_exome_illumina_coding_v1.Homo_sapiens_assembly19.targets.interval_list \
      -O $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf
 fi
-
 fi
 fi
 
 # filter variants
 if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf \) ] ; then
   gatk FilterMutectCalls \
+    -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
     -V $RESDIR/$(basename $TUMOR_BAM .bam)\.vcf \
     -O $RESDIR/$(basename $TUMOR_BAM .bam)_filt\.vcf
 fi
+
+### REVISIT step below -- not sure if necessary
+# after upgrading to version 4.1.2.0
 
 # extract passing variants
 if [ ! \( -f $RESDIR/$(basename $TUMOR_BAM .bam)_pass\.vcf \) ] ; then
@@ -115,22 +120,38 @@ fi
 
 
 ##################### run vcf2maf
+# VEP version 95 (VER=95 in gist https://gist.github.com/ckandoth/5390e3ae4ecf182fa92f6318cfa9fa97)
 # first install VEP (https://github.com/Ensembl/ensembl-vep) - install perl module DBI
 # next install vcf2maf tool with https://github.com/mskcc/vcf2maf
 
-## VEP installed - need to install vcf2maf now https://github.com/mskcc/vcf2maf
+#PLEASE REMEMBER TO 
+#1. add /homes/keegan/vep to your PERL5LIB environment variable
+#2. add /homes/keegan/vep/htslib to your PATH environment variable
 
+#export VEP_PATH=$HOME/vep
+#export VEP_DATA=/rafalab/keegan/ReferenceGenomes/.vep
+#export VER=95
+
+#curl -LO https://github.com/Ensembl/ensembl-vep/archive/release/95.3.tar.gz
+#tar -zxf 95.3.tar.gz; rm -f 95.3.tar.gz; mv ensembl-vep-release-95.3 $VEP_PATH
+#cd $VEP_PATH
+
+#export PERL5LIB=$VEP_PATH:$PERL5LIB
+#export PATH=$VEP_PATH/htslib:$PATH
 
 # convert vcf to maf
 if [ ! -f $RESDIR/$(basename $TUMOR_BAM .bam)\.maf ]; then
-  module load tabix
-  perl mskcc-vcf2maf-*/vcf2maf.pl \
+  #module load tabix
+  perl mskcc-vcf2maf-5*/vcf2maf.pl \
     --input-vcf $RESDIR/$(basename $TUMOR_BAM .bam)\_pass.vcf \
     --output-maf $RESDIR/$(basename $TUMOR_BAM .bam)\.maf \
     --tumor-id $(basename $TUMOR_BAM .bam) \
     --normal-id $(basename $NORMAL_BAM .bam) \
     --vcf-normal-id $(basename $NORMAL_BAM2 .bam) \
-    --ref-fasta $HOME/.vep/homo_sapiens/86_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz \
+    --ref-fasta /rafalab/keegan/ReferenceGenomes/.vep/homo_sapiens/95_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz \
+    --vep-path ~/vep \
+    --vep-data /rafalab/keegan/ReferenceGenomes/.vep \
+    --filter-vcf /rafalab/keegan/ReferenceGenomes/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz \
     --vep-forks 1
 fi
 

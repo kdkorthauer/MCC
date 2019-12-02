@@ -16,7 +16,7 @@ if [ ! -f ../../../PREPROCESS/DNA/mskcc-vcf2maf-*/vcf2maf.pl  ]; then
   chmod +x ../../PREPROCESS/DNA/mskcc-vcf2maf-*/*.pl
 fi
 
-# call mutations - loop over all tumor / normal pairs 
+# call mutations - loop over all normal samples 
 
 for id in 5350 5351 5367 5368 5369 5473 5474 MCC-001; do
 
@@ -28,6 +28,7 @@ sleep 1
 done
 
 ### wait until above is complete before running next steps...
+### loop over all tumor/normal pairs
 
 for id in 5350 5351 5367 5368 5369 5473 5474 MCC-001; do
 echo "Tumor vs Normal for ${id}"
@@ -44,7 +45,7 @@ echo "Cell line vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
 export TUMOR_BAM=DFCI-${id}-CL-01.bam
 
-if [ $id = "5350" ] || [ $id = "5351" ]; then
+if [ $id = "5350" ] || [ $id = "5351" ] || [ $id = "5473" ] || [ $id = "5474" ]; then
   export TUMOR_BAM=DFCI-${id}-C-01.bam
 fi
 
