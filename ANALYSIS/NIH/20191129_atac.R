@@ -58,7 +58,9 @@ for (gene in genelist){
     spans <- unlist(width(range(test)))
     if (max(spans) > 10*max(spans[-which.max(spans)])){
     	rmv <- test[[which.max(spans)]]$exon_id
-    	genetab <- genetab[-(genetab$exon_id %in% rmv),]
+    	if (sum(genetab$exon_id %in% rmv)>0){
+    	  genetab <- genetab[-(genetab$exon_id %in% rmv),]
+    	}
     }
 
     beg <- min(start(genetab), end(genetab))
