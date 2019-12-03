@@ -150,7 +150,7 @@ for (gene in genelist){
 	
 	pdf(file.path(outdir, paste0("ATAC_foldchange_", gene, ".pdf")), 
 		height=6, width=6)
-	plotTracks(list.append(itrack, grtrack_others, grtrack_target, grtrack, dtrackList.fc),
+	plotTracks(list.append(itrack, grtrack_others, grtrack_target, dtrackList.fc),
 		from=beg, to=end, col=NULL, ylim=c(0,ymax + 1), type="h",
 		chromosome=chr)
     dev.off()
