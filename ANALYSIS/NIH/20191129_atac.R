@@ -69,9 +69,17 @@ for (gene in genelist){
     beg <- beg - 0.3*w
     end <- end + 0.3*w
 
+    thistx <- transcripts(txdb, filter=list(gene_id = fetchgene$ENTREZID))$tx_name
+	
     grtrack <- GeneRegionTrack(txdb, chromosome = chr,
+    	feature=thistx,
     	transcriptAnnotation = "symbol", name = gene)
-  
+    grtrack <- subset(grtrack, from=beg, to=end)
+    isthistx <- transcript(grtrack) %in% thistx 
+    grtrack_target <- grtrack[isthistx,]
+    grtrack_others <- grtrack[!isthistx,]
+    names(grtrack_others) <- "Others"
+
     # get chr drawing 
 	itrack <- IdeogramTrack(genome=gen, chromosome=chr)
 
@@ -106,7 +114,7 @@ for (gene in genelist){
 	
 	pdf(file.path(outdir, paste0("ATAC_pval_", gene, ".pdf")), 
 		height=6, width=6)
-	plotTracks(list.append(itrack, gtrack, grtrack, dtrackList.pval),
+	plotTracks(list.append(itrack, grtrack_others, grtrack_target, dtrackList.pval),
 		from=beg, to=end, col=NULL, ylim=c(0,ymax+1), type="h")
     dev.off()
 
@@ -142,7 +150,7 @@ for (gene in genelist){
 	
 	pdf(file.path(outdir, paste0("ATAC_foldchange_", gene, ".pdf")), 
 		height=6, width=6)
-	plotTracks(list.append(itrack, gtrack, grtrack, dtrackList.fc),
+	plotTracks(list.append(itrack, grtrack_others, grtrack_target, grtrack, dtrackList.fc),
 		from=beg, to=end, col=NULL, ylim=c(0,ymax + 1), type="h",
 		chromosome=chr)
     dev.off()
