@@ -1,13 +1,12 @@
 #!/bin/bash
-#SBATCH -J MCCrna
-#SBATCH -n 10
-#SBATCH -N 1
-#SBATCH --mem 20G
-#SBATCH -t 0-4:00
-#SBATCH -o slurm/MCCrna-%j.out
-#SBATCH -e slurm/MCCrna-%j.err
+#PBS -l walltime=06:00:00,select=1:ncpus=10:mem=20gb
+#PBS -N MCCrna
+#PBS -A st-kdkortha-1
+#PBS -o /scratch/st-kdkortha-1/_pbs/MCC/MCC_DNA.out
+#PBS -e /scratch/st-kdkortha-1/_pbs/MCC/MCC_DNA.err
 
-#export RSTUDIO_PANDOC="/n/helmod/apps/centos7/Core/rstudio/1.1.453-fasrc01/bin/pandoc"
+
+export RSTUDIO_PANDOC="/home/kdkortha/bin/rstudio-1.2.5033/bin/pandoc"
 
 # change filename to Rmd to be knitted. 
 # Make sure ncores in Rmd matches -n batch param above
