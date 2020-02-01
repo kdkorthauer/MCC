@@ -49,7 +49,7 @@ idmap <- data.frame(
     stringsAsFactors=FALSE
 	)
 
-library(lattice)
+
 dtrk <- vector("list", length(tss))
 
 names(dtrk) <- names(tss)
@@ -101,7 +101,7 @@ for (gene in names(tss)){
     if (i < length(tss)){
       plotTracks(dtrk[gene], 
       	groups=rep(1,length(grl)), 
-      	type=c("a"), ylim=c(0,ceiling(ymax)))
+      	type=c("a"), ylim=c(0,9))
     }else{
       plotTracks(list.append(dtrk[gene], tssTrack, axisTrack), 
       	groups=rep(1,length(grl)), 
@@ -111,10 +111,12 @@ for (gene in names(tss)){
 
 }
 
-
-
-ggsave()
-
+pdf(file.path(outdir, paste0("ATAC_fc_average_tss.pdf")), 
+		height=5, width=6)
+plotTracks(list.append(dtrk, tssTrack, axisTrack), 
+      	groups=rep(1,length(grl)), 
+      	  type=c("a"), ylim=c(0,9))
+dev.off()
 
 #######################################################################
 #######################################################################
