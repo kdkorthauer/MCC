@@ -39,7 +39,7 @@ library(gplots)
 
 mafdir <- "../../PREPROCESS/DNA/mutect2-gatk4.1.2.0-results/"
 
-mutsigdir <- "/rafalab/keegan/MCC/PREPROCESS/DNA/mutsigCV/"
+mutsigdir <- "../../PREPROCESS/DNA/mutsigCV/"
 dir.create(mutsigdir, showWarnings = FALSE)
 
 ```
@@ -247,13 +247,14 @@ oncoplot2(maf = subsetMaf(maf, genes=bmrtab$gene),
          bgCol = "white",
          removeNonMutated = FALSE,
          sampleOrder = tab$Tumor_Sample_Barcode,
-         exprsTbl = select(bmrtab, gene, bmr))
+         exprsTbl = select(bmrtab, gene, bmr),
+         drawRowBar = FALSE)
 ```
 
 
 Co-mut plot for top 50 genes (by number of mutations), annotated with gene size estimated by MutSig (left panel). 
 
-```{r comut50-size, fig.height = 10, fig.width = 8, fig.path="plots/", dev="png"}
+```{r comut50-size, fig.height = 10, fig.width = 8, fig.path="plots/", dev=c("png", "pdf")}
 
 oncoplot2(maf = subsetMaf(maf, genes=bmrtab$gene), 
          top = 50,
@@ -263,7 +264,8 @@ oncoplot2(maf = subsetMaf(maf, genes=bmrtab$gene),
          bgCol = "white",
          removeNonMutated = FALSE,
          sampleOrder = tab$Tumor_Sample_Barcode,
-         exprsTbl = select(bmrtab, gene, size))
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
 ```
 
 
@@ -278,7 +280,8 @@ oncoplot2(maf = subsetMaf(maf, genes=bmrtab$gene),
          bgCol = "white",
          removeNonMutated = FALSE,
          sampleOrder = tab$Tumor_Sample_Barcode,
-         exprsTbl = select(bmrtab, gene, size))
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
 ```
 
 
@@ -302,7 +305,8 @@ oncoplot2(maf = maf, genes=goi$symbol,
          fontSize = 0.8,
          removeNonMutated = FALSE,
          sampleOrder = tab$Tumor_Sample_Barcode,
-         exprsTbl = select(bmrtab, gene, size))
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
 #dev.off()
 ```
 
@@ -326,7 +330,8 @@ oncoplot2(maf = maf, genes=symbol,
          fontSize = 0.8,
          removeNonMutated = FALSE,
          sampleOrder = tab$Tumor_Sample_Barcode,
-         exprsTbl = select(bmrtab, gene, size))
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
 #dev.off()
 ```
 
@@ -368,7 +373,7 @@ plot(hclust(d))
 
 In the following heatmap we plot the similarity values computed in the previous section (1 minus the percentage of sites with a mutation in one or both samples that agree -- ignores sites with no mutation in either sample). Values of similarity below 0.10 are not shown. 
 
-```{r,fig.height = 10, fig.width = 10}
+```{r pctoverlap_TN, fig.height = 8, fig.width = 8, fig.path="plots/", dev=c("png", "pdf")}
 d <- 1-as.matrix(d)^2
 colnames(d) <- rownames(d) <- paste0(maf@clinical.data$patient,
   "-", ifelse(grepl("Tumor", maf@clinical.data$type), "T", "C"))

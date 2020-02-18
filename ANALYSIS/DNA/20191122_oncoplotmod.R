@@ -203,8 +203,8 @@ oncoplot2 = function(maf, top = 20, genes = NULL, altered = FALSE, mutsig = NULL
 
 
     if(drawColBar){
-      #par(mar = c(0.25 , 0, 1, 2), xpd = TRUE)
-      par(mar = c(0.25 , 1, 1, 0), xpd = TRUE)
+      #par(mar = c(0.25 , 0, 1, 2), xpd = TRUE) # original
+      par(mar = c(0.25 , 1, 1, 0), xpd = TRUE) # mod1
       #plot(x = NA, y = NA, type = "n", axes = FALSE,
       #     xlim = exprs_bar_lims, ylim = c(0, 1), 
       #     xaxs = "i", main = sidebartitle)
@@ -288,14 +288,14 @@ oncoplot2 = function(maf, top = 20, genes = NULL, altered = FALSE, mutsig = NULL
     if(!drawRowBar & !drawColBar){
       par(mar = c(0.5, 1, 2.5, 0), xpd = TRUE)
     }else if(!drawRowBar & drawColBar){
-      par(mar = c(0.5, 1, 0, 5), xpd = TRUE)
+      #par(mar = c(0.5, 1, 0, 5), xpd = TRUE)
+      par(mar = c(0.5, 1, 0, 0), xpd = TRUE) # mod1
     }else if(drawRowBar & !drawColBar){
       par(mar = c(0.5, 1, 2.5, 0), xpd = TRUE)
     } else{
       par(mar = c(0.5, 1, 0, 0), xpd = TRUE)
     }
   }
-
     plot(x = NA, y = NA, type = "n", 
       xlim = rev(-exprs_bar_lims), 
       ylim = c(0, nrow(exprsTbl)),
