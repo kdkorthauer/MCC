@@ -330,6 +330,9 @@ We'll first carry out a variance stabilizing transformation, using all genes.
 # carry out the vs transformation:
 vsd = vst(dat)
 
+# print table of vst values:
+write.table(assay(vsd), quote=FALSE, file=file.path("results", "vst_expression_tumor.txt"), sep="\t", col.names=NA)
+
 # plot variance
 meanSdPlot(assay(vsd))
 ```
