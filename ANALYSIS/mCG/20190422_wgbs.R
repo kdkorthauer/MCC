@@ -9,8 +9,9 @@ library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 library(ComplexHeatmap)
 library(RColorBrewer)
 library(org.Hs.eg.db)
+library(readxl)
 
-dat.dir <- file.path("/n/irizarryfs01/kkorthauer/MCC/DATA/mCG/wgbs/cov")
+dat.dir <- file.path("../../DATA/mCG/wgbs/cov")
 dat.files <- list.files(dat.dir, full.names = TRUE)
 count.tab <- file.path(dat.dir, "counts.txt") 
 bsseq.obj <- file.path(dat.dir, "bsseq.rds")
@@ -47,9 +48,10 @@ if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
   }else{
   	tab <- readRDS(count.tab)
   }
+}
 
-  # build bsseq obj
-  if(!file.exists(bsseq.obj)){
+# build bsseq obj
+if(!file.exists(bsseq.obj)){
     # replace NAs with zeros
     tab[is.na(tab)] <- 0
 
@@ -93,15 +95,15 @@ if (!file.exists(count.tab) | !file.exists(bsseq.obj)){
     pData(bs)$virus[grepl("2|3|5|7", pData(bs)$sample)] <- "Negative"
 
     saveRDS(bs, file = bsseq.obj)
-  }else{
+}else{
   	bs <- readRDS(bsseq.obj)
     pData(bs)$mcc.id <- c("275", "282", "290", "301", "320",
                           "336", "350", "367", "2314")
     pData(bs)$ifng <- "++"
     pData(bs)$ifng[grepl("336|350", pData(bs)$mcc.id)] <- "-"
     pData(bs)$ifng[grepl("2314|320", pData(bs)$mcc.id)] <- "+"
-  }
 }
+
 
 # filter (at least 4 samples have coverage)
 ix <- which(rowSums(getCoverage(bs, type = "Cov") > 0) >= 4)
@@ -136,6 +138,13 @@ plotEmpiricalDistribution(bs[idx,],
 goi <- read_tsv("../genes_of_interest.txt", col_names = FALSE)
 colnames(goi) <- c("symbol", "description")
 
+subset <- read_xlsx("../UPDATED 12-23-19 RNA-Seq and WGBS Gene Set for Class I APM (1).xlsx", col_names=FALSE)
+subset <- cbind(subset, rep("subset", length(subset)), NA)
+colnames(subset) <-c("symbol", "description", NA)
+goi <- rbind(goi, subset)
+
+goi <- goi[,-3]
+
 # get coords of genes of interest 
 db <- TxDb.Hsapiens.UCSC.hg38.knownGene
 tx = transcriptsBy(db)
@@ -151,7 +160,9 @@ np <- xx[names(prom)]
 np[which(lengths(np) == 0)] <- NA
 names(prom) <- unlist(np)
 seqlevelsStyle(prom) <- "NCBI"
-prom = unlist(prom[names(prom) %in% goi$symbol])
+prom <- prom[names(prom) %in% goi$symbol]
+prom <- GRangesList(lapply(prom, reduce))
+prom = unlist(prom)
 prom$symbol <- names(prom)
 
 # overlap with meth
@@ -185,7 +196,7 @@ ha_column = HeatmapAnnotation(df = data.frame(Virus = pData(bs)$virus,
                               col = list(Virus = virus,
                                          IFNg = ifng))
 
-x <- match(goi$symbol, averagedSignal$Group.1)
+x <- match(averagedSignal$Group.1, goi$symbol)
 x <- x[!is.na(x)]
 rowcol <- colorRampPalette( rev(brewer.pal(length(unique(goi$description[x])),
              "Paired")) )(length(unique(goi$description[x])))
@@ -193,9 +204,10 @@ names(rowcol) <- sort(unique(goi$description[x]))
 ha_row = rowAnnotation(df = data.frame(Category = goi$description[x]),
                        col = list(Category = rowcol))
 
-
 ht = Heatmap(averagedSignal[,-1], name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
+               row_dend_reorder=TRUE,
                show_row_names = FALSE, show_column_names = FALSE)
 
 heatmap.file <- file.path(out.dir, "heatmap_all.pdf")
@@ -208,7 +220,9 @@ dev.off()
 y <- goi$description[x] == "Class I"
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
+               row_dend_reorder=TRUE,
                show_row_names = TRUE, show_column_names = FALSE)
 ha_row = rowAnnotation(df = data.frame(Category = goi$description[x][y]),
                        col = list(Category = rowcol))
@@ -222,12 +236,13 @@ dev.off()
 byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
   )
-byGroupDiff <- abs(byGroupAvg[,1] - byGroupAvg[,2])
+byGroupDiff <- rowMeans(cbind(byGroupAvg[,1],byGroupAvg[,2]))
 diffRank <- order(byGroupDiff, decreasing = TRUE)
 
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
                show_row_names = TRUE, show_column_names = FALSE,
                row_order = diffRank,
                column_order = c(which(pData(bs)$virus == "Positive"),
@@ -244,16 +259,15 @@ byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifn
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "+")),
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "-"))
   )
-byGroupDiff <- rowSums(cbind(abs(byGroupAvg[,1] - byGroupAvg[,2]),
-                     abs(byGroupAvg[,2] - byGroupAvg[,3]),
-                     abs(byGroupAvg[,1] - byGroupAvg[,3])))
+byGroupDiff <- rowMeans(cbind(byGroupAvg[,1],byGroupAvg[,2],byGroupAvg[,1]))
 diffRank <- order(byGroupDiff, decreasing = TRUE)
 
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column, 
                show_row_names = TRUE, show_column_names = FALSE,
                row_order = diffRank,
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
                column_order = c(which(pData(bs)$ifng == "++"),
                                 which(pData(bs)$ifng == "+"),
                                 which(pData(bs)$ifng == "-")),
@@ -268,8 +282,10 @@ dev.off()
 y <- goi$description[x] == "Class II"
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
-               show_row_names = TRUE, show_column_names = FALSE)
+               top_annotation = ha_column,
+               show_row_names = TRUE, show_column_names = FALSE,
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
+               row_dend_reorder=TRUE)
 ha_row = rowAnnotation(df = data.frame(Category = goi$description[x][y]),
                        col = list(Category = rowcol))
 
@@ -282,12 +298,13 @@ dev.off()
 byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
   )
-byGroupDiff <- abs(byGroupAvg[,1] - byGroupAvg[,2])
-diffRank <- order(byGroupDiff, decreasing = TRUE)
+byGroupDiff <- cbind(byGroupAvg[,1],byGroupAvg[,2])
+diffRank <- order(rowMeans(byGroupDiff), decreasing = TRUE)
 
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
                show_row_names = TRUE, show_column_names = FALSE,
                row_order = diffRank,
                column_order = c(which(pData(bs)$virus == "Positive"),
@@ -304,14 +321,13 @@ byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifn
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "+")),
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "-"))
   )
-byGroupDiff <- rowSums(cbind(abs(byGroupAvg[,1] - byGroupAvg[,2]),
-                     abs(byGroupAvg[,2] - byGroupAvg[,3]),
-                     abs(byGroupAvg[,1] - byGroupAvg[,3])))
-diffRank <- order(byGroupDiff, decreasing = TRUE)
+byGroupDiff <- cbind(byGroupAvg[,1], byGroupAvg[,2], byGroupAvg[,3])
+diffRank <- order(rowMeans(byGroupDiff), decreasing = TRUE)
 
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
                show_row_names = TRUE, show_column_names = FALSE,
                row_order = diffRank,
                column_order = c(which(pData(bs)$ifng == "++"),
@@ -326,11 +342,13 @@ dev.off()
 
 
 # other
-y <- !(goi$description[x] %in% c("Class I", "Class II"))
+y <- !(goi$description[x] %in% c("Class I", "Class II", "subset"))
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
-               show_row_names = TRUE, show_column_names = FALSE)
+               top_annotation = ha_column, 
+               show_row_names = TRUE, show_column_names = FALSE,
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
+               row_dend_reorder=TRUE)
 ha_row = rowAnnotation(df = data.frame(Category = goi$description[x][y]),
                        col = list(Category = rowcol))
 
@@ -343,12 +361,13 @@ dev.off()
 byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
   )
-byGroupDiff <- abs(byGroupAvg[,1] - byGroupAvg[,2])
-diffRank <- order(byGroupDiff, decreasing = TRUE)
+byGroupDiff <- cbind(byGroupAvg[,1], byGroupAvg[,2])
+diffRank <- order(rowMeans(byGroupDiff), decreasing = TRUE)
 
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
                show_row_names = TRUE, show_column_names = FALSE,
                row_order = diffRank,
                column_order = c(which(pData(bs)$virus == "Positive"),
@@ -365,14 +384,13 @@ byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifn
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "+")),
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "-"))
   )
-byGroupDiff <- rowSums(cbind(abs(byGroupAvg[,1] - byGroupAvg[,2]),
-                     abs(byGroupAvg[,2] - byGroupAvg[,3]),
-                     abs(byGroupAvg[,1] - byGroupAvg[,3])))
-diffRank <- order(byGroupDiff, decreasing = TRUE)
+byGroupDiff <- cbind(byGroupAvg[,1], byGroupAvg[,2], byGroupAvg[,3])
+diffRank <- order(rowMeans(byGroupDiff), decreasing = TRUE)
 
 ht = Heatmap(averagedSignal[y,-1], 
                name = "Promoter\nmCG", 
-               top_annotation = ha_column, col = ecolors,
+               top_annotation = ha_column,
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
                show_row_names = TRUE, show_column_names = FALSE,
                row_order = diffRank,
                column_order = c(which(pData(bs)$ifng == "++"),
@@ -384,6 +402,74 @@ heatmap.file <- file.path(out.dir, "heatmap_other_orderedI.pdf")
 pdf(heatmap.file)
    draw(ht + ha_row)
 dev.off()
+
+
+# subset for Patrick
+x0 <- which(goi$description=="subset")
+x <- match(averagedSignal$Group.1, goi$symbol[x0])
+x <- x[!is.na(x)]
+y <- averagedSignal[,1] %in% goi$symbol[goi$description == "subset"]
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
+               row_dend_reorder = TRUE,
+               show_row_names = TRUE, show_column_names = FALSE)
+
+heatmap.file <- file.path(out.dir, "heatmap_subsetAPM.pdf")
+pdf(heatmap.file)
+   draw(ht)
+dev.off()
+
+# ordered by dmr signal in virus pos vs neg
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
+  )
+byGroupDiff <- cbind(byGroupAvg[,1],byGroupAvg[,2])
+diffRank <- order(rowMeans(byGroupDiff), decreasing = TRUE)
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$virus == "Positive"),
+                                which(pData(bs)$virus == "Negative")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_subsetAPM_orderedV.pdf")
+pdf(heatmap.file)
+   draw(ht)
+dev.off()
+
+# ordered by dmr signal in IFNg category
+byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "++")), 
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "+")),
+  rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$ifng == "-"))
+  )
+byGroupDiff <- cbind(byGroupAvg[,1], byGroupAvg[,2], byGroupAvg[,3])
+diffRank <- order(rowMeans(byGroupDiff), decreasing = TRUE)
+
+
+ht = Heatmap(averagedSignal[y,-1], 
+               name = "Promoter\nmCG", 
+               top_annotation = ha_column, 
+               heatmap_legend_param = list(at = c(0, 0.5, 1)),
+               show_row_names = TRUE, show_column_names = FALSE,
+               row_order = diffRank,
+               column_order = c(which(pData(bs)$ifng == "++"),
+                                which(pData(bs)$ifng == "+"),
+                                which(pData(bs)$ifng == "-")),
+               cluster_rows = FALSE,
+               cluster_columns = FALSE)
+heatmap.file <- file.path(out.dir, "heatmap_subsetAPM_orderedI.pdf")
+pdf(heatmap.file)
+   draw(ht)
+dev.off()
+
+
+
 
 # traceplot meth colored by viral status and ifng status
 annoTrack <- getAnnot("hg38")
