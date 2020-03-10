@@ -277,8 +277,13 @@ rowData(dat.orig)$symbol <- map.orig$SYMBOL[x]
 Next we donwload the list of housekeeping genes.
 
 ```{r}
-hkgenes <- read_tsv("https://www.tau.ac.il/~elieis/HKG/HK_genes.txt", 
-                    col_names = c("symbol", "id"))
+if (!file.exists("../HK_genes.txt")){
+  download.file("https://www.tau.ac.il/~elieis/HKG/HK_genes.txt", 
+    destfile="../HK_genes.txt")
+}
+
+hkgenes <- read.table("../HK_genes.txt",stringsAsFactors = FALSE)
+colnames(hkgenes) = c("symbol", "id")
 
 rowData(dat)$housekeeping <- rowData(dat)$symbol %in% hkgenes$symbol
 
@@ -531,8 +536,8 @@ plotpairs <- function(mat, main = ""){
 
 
 mat <- data.frame(counts(dat, normalize = TRUE)+1)
-x <- match(as.numeric(gsub(".C|.T|.CL", "", gsub("DFCI.", "", colnames(mat)))), id.map$id1)
-colnames(mat) <- paste0(ifelse(grepl("T", colnames(mat)), "T-", "C-"), id.map$id2[x])
+x2 <- match(as.numeric(gsub(".C|.T|.CL", "", gsub("DFCI.", "", colnames(mat)))), id.map$id1)
+colnames(mat) <- paste0(ifelse(grepl("T", colnames(mat)), "T-", "C-"), id.map$id2[x2])
 
 
 # just for tumors
@@ -646,6 +651,14 @@ draw(ht+ha_right)
 Next we'll use only a smaller set of variable genes. First for log2 normalized counts:
 
 ```{r heatmap-dist-var-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png')}
+ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat)[, c("type")],
+                                              Virus = colData(dat)[, c("virus")],
+                                              ID = colData(dat)[, c("mcc.id")]),
+                              col = list(Type = c(Cell_line="lightgrey", Tumor="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2))
+
+
 # rank variable genes:
 top <- rank(-rowVars(counts(dat)), ties.method = "first")
 
@@ -1029,6 +1042,53 @@ ht = Heatmap(mat, name = "VS counts",
              top_annotation = ha_column,
              row_names_gp = gpar(fontsize = 7),
              col = ecolors)
+draw(ht)
+```
+
+
+### Revised subset of Class I genes for Patrick
+
+We'll repeat with the pared-down list of Class I genes sent by Patrick via the Dropbox folder ("UPDATED 12-23-19 RNA-Seq and WGBS Gene Set for Class I APM (1).xlsx").
+
+```{r}
+goi <- read_xlsx("../UPDATED 12-23-19 RNA-Seq and WGBS Gene Set for Class I APM (1).xlsx", col_names=FALSE)
+colnames(goi) <- c("symbol")
+
+symbol <- goi$symbol
+```
+
+```{r heatmap-goi-l2n-patrick-revised, fig.width=6, fig.height=8, fig.path='plots/', dev=c("png")}
+# indices of genes of interest and extra HLA genes
+x <- which(rowData(dat.orig)$symbol %in% symbol)  
+
+# subset normalized counts
+mat <- log2(counts(dat.orig, normalize = TRUE)[x,] + 1)
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors, column_dend_reorder=TRUE,
+             row_dend_reorder=TRUE)
+
+draw(ht)
+```
+
+Next for vs-transformed counts.
+
+```{r heatmap-goi-vs-patrick-revised, fig.width=6, fig.height=8, fig.path='plots/', dev=c("png")}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat.orig))[x,]
+rownames(mat) <- rowData(dat.orig)$symbol[x]
+colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors,column_dend_reorder=TRUE,
+             row_dend_reorder=TRUE)
+
 draw(ht)
 ```
 
