@@ -51,7 +51,7 @@ library(cowplot)
 library(ggridges)
 library(GGally)
 
-register(MulticoreParam(10))
+register(MulticoreParam(2))
 
 viralquant_file <- "../../PREPROCESS/RNA/viral/virus.read.counts.txt"
 ```
@@ -85,6 +85,21 @@ table(colDat$dfci.id, colDat$type)
 
 Here we have `r sum(rowSums(table(colDat$dfci.id, colDat$type)) == 2)` complete
 pairs of tumor and cell line.
+
+We'll also read in the RNA-seq count data from control cell lines (fibroblasts, keratinocytes, MKL1, and Waga) that were downloaded, aligned with STAR, and quantified with Subread.
+
+```{r}
+exp_control <- data.frame(read_tsv("../../PREPROCESS/RNA/control_lines/counts/mRNA-Seq.counts.txt"))
+rownames(exp_control) <- exp_control[,1]
+exp_control <- exp_control[, -c(1:6)]
+
+colDat_control <- data.frame(sampleName = colnames(exp_control),
+                             dfci.id = NA,
+                             type = gsub("_.*", "", colnames(exp_control)),
+                             mcc.id = NA,
+                             virus = NA,
+                             stringsAsFactors=FALSE)
+```
 
 We'll also add in the metadata from the de-identified excel file so we can map
 the Broad sample IDs back to the original MCC patient ids. Excel file doesn't 
@@ -133,6 +148,12 @@ Finally, we'll construct a DESeq dataset.
 ```{r}
 dat <- DESeqDataSetFromMatrix(countData = exp,
                               colData = colDat,
+                              rowData = rowDat,
+                              design = ~ type)
+
+# including control lines
+dat_control <- DESeqDataSetFromMatrix(countData = cbind(exp, exp_control),
+                              colData = rbind(colDat, colDat_control),
                               rowData = rowDat,
                               design = ~ type)
 ```
@@ -184,6 +205,7 @@ less than 1. These are considered not expressed.
 dat.orig <- dat
 filt <- which(rowMeans(counts(dat)) < 1)
 dat <- dat[ -filt, ]
+dat_control <- dat_control[ -filt, ]
 ```
 
 ## Size factor
@@ -192,6 +214,7 @@ Next we'll estimate the library size factors.
 
 ```{r}
 dat <- estimateSizeFactors(dat)
+dat_control <- estimateSizeFactors(dat_control)
 dat.orig <- estimateSizeFactors(dat.orig)
 ```
 
@@ -272,6 +295,18 @@ map.orig <- select(org.Hs.eg.db,
 x <- match(unlist(lapply(strsplit(rownames(dat.orig), "\\."), function(x) x[1])),
            map.orig$ENSEMBL)
 rowData(dat.orig)$symbol <- map.orig$SYMBOL[x]
+
+
+# with control
+map.cont <- select(org.Hs.eg.db,
+              keys = unlist(lapply(strsplit(rownames(dat_control), "\\."), 
+                                       function(x) x[1])),
+              columns=c("SYMBOL","GENENAME", "ENSEMBL"),
+              keytype="ENSEMBL")
+x <- match(unlist(lapply(strsplit(rownames(dat_control), "\\."), function(x) x[1])),
+           map.cont$ENSEMBL)
+rowData(dat_control)$symbol <- map.cont$SYMBOL[x]
+
 ```
 
 Next we donwload the list of housekeeping genes.
@@ -313,6 +348,10 @@ data.frame(log(set1$normalizedCounts+1)) %>%
  geom_boxplot() +
  ggtitle("Housekeeping genes") +
  ylab("log(normalized count + 1)")
+
+rowData(dat_control)$housekeeping <- rowData(dat_control)$symbol %in% hkgenes$symbol
+dat_control_hk <- RUVg(counts(dat_control), rowData(dat_control)$housekeeping, k=1)
+assays(dat_control)$hk_norm <- dat_control_hk$normalizedCounts
 ```
 
 # Unsupervised clustering
@@ -329,9 +368,16 @@ We'll first carry out a variance stabilizing transformation, using all genes.
 ```{r}
 # carry out the vs transformation:
 vsd = vst(dat)
+vsd_control = vst(dat_control)
 
 # print table of vst values:
 write.table(assay(vsd), quote=FALSE, file=file.path("results", "vst_expression_tumor.txt"), sep="\t", col.names=NA)
+
+# print table of vst values:
+write.table(assay(vsd_control), quote=FALSE, file=file.path("results", "vst_expression_tumor_withControlLines.txt"), sep="\t", col.names=NA)
+
+# print housekeeping normed counts
+write.table(assays(dat_control)$hk_norm, quote=FALSE, file=file.path("results", "housekeepingNormed_expression_tumor_withControlLines.txt"), sep="\t", col.names=NA)
 
 # plot variance
 meanSdPlot(assay(vsd))
@@ -339,7 +385,7 @@ meanSdPlot(assay(vsd))
 
 Pairs scatterplot of all samples
 
-```{r pairscatter, fig.width = 11, fig.height = 10, fig.path='plots/', dev = c('png')}
+```{r pairscatter, fig.width = 11, fig.height = 10, fig.path='plots/', dev = c('png'), eval=FALSE}
 my_fn <- function(data, mapping, ...){
       p <- ggplot(data = data, mapping = mapping) + 
         #stat_density2d(aes(fill=..density..), geom="tile", contour = FALSE, n = 100) +
@@ -567,7 +613,6 @@ plotpairs(mat,
 
 Now we'll plot the distances in a heatmap, first for log2 normalized counts:
 
-
 ```{r heatmap-dist-l2n, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png')}
 dists <- dist(t(log2(counts(dat, normalize = TRUE)+1)))
 dt <- function(x){
@@ -591,6 +636,41 @@ ht = Heatmap(mat, name = "Distance\n(log2 Norm)",
              top_annotation = ha_column, col = colors,
              clustering_distance_rows=dt,
              clustering_distance_columns=dt)
+draw(ht)
+
+```
+
+Including the control lines
+
+```{r heatmap-dist-l2n-withcontrol-hk, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png')}
+cols2_control <-  colorRampPalette( rev(brewer.pal(length(unique(colData(dat_control)$mcc.id)), 
+                                           "Set3")) )(length(unique(colData(dat_control)$mcc.id)))
+names(cols2_control) <- unique(colData(dat)$mcc.id)
+cols2_control <- cols2_control[-which(is.na(names(cols2_control)))]
+
+vircol <- c("#543005", "#DFC27D", "white")
+names(vircol) <- unique(colData(dat)$virus)
+vircol <- vircol[-which(is.na(names(vircol)))]
+
+ha_column_control = HeatmapAnnotation(df = data.frame(
+                      Type = colData(dat_control)[, c("type")],
+                      Virus = colData(dat_control)[, c("virus")],
+                      ID = colData(dat_control)[, c("mcc.id")]),
+       col = list(Type = c(Cell_line="lightgrey", Tumor="black", 
+                           fibroblasts = "green", keratinocytes = "darkgreen",
+                           waga= "darkblue", mkl1 = "blue"), 
+                  Virus = vircol,
+                  ID = cols2_control), na_col="white")
+
+#dists <- dist(t(log2(counts(dat_control, normalize = TRUE)+1)))
+dists <- dist(t(log2(assays(dat_control)$hk_norm+1)))
+mat <- as.matrix(dists) # convert to matrix
+rownames(mat) <- colnames(mat) <- gsub("NA ", "", with(colData(dat_control), paste0(mcc.id, " ", 
+                                       gsub("_", " ", type))))
+
+
+ht = Heatmap(mat, name = "Distance\n(log2 HK Norm)", col = colors,
+    top_annotation = ha_column_control)
 draw(ht)
 
 ```
@@ -646,6 +726,21 @@ ht = Heatmap(mat, name = "Distance\n(VS)",
              show_row_names = FALSE,
              show_column_names = FALSE)
 draw(ht+ha_right)
+```
+
+Now including control samples. 
+
+```{r heatmap-dist-vs-withcontrol, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png')}
+distsVS_control <- dist(t(assay(vsd_control)))
+mat <- as.matrix(distsVS_control) 
+rownames(mat) <- colnames(mat) <- gsub("NA ", "", with(colData(dat_control), paste0(mcc.id, " ", 
+                                       gsub("_", " ", type))))
+
+
+ht = Heatmap(mat, name = "Distance\n(VS)",  col = colors,
+    top_annotation = ha_column_control)
+draw(ht)
+
 ```
 
 
@@ -1058,6 +1153,7 @@ goi <- read_xlsx("../UPDATED 12-23-19 RNA-Seq and WGBS Gene Set for Class I APM 
 colnames(goi) <- c("symbol")
 
 symbol <- goi$symbol
+symbol <- c(symbol, "GAPDH", "ACTB")
 ```
 
 ```{r heatmap-goi-l2n-patrick-revised, fig.width=6, fig.height=8, fig.path='plots/', dev=c("png")}
@@ -1071,6 +1167,27 @@ colnames(mat) <- with(colData(dat.orig), paste0(mcc.id, " ", gsub("_", " ", type
 
 ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
              top_annotation = ha_column,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors, column_dend_reorder=TRUE,
+             row_dend_reorder=TRUE)
+
+draw(ht)
+```
+
+With control lines
+
+```{r heatmap-goi-l2n-patrick-revised-withcontrollines-hk, fig.width=9, fig.height=8, fig.path='plots/', dev=c("png")}
+# indices of genes of interest and extra HLA genes
+x2 <- which(rowData(dat_control)$symbol %in% symbol)  
+ 
+# subset normalized counts
+#mat <- log2(counts(dat_control, normalize = TRUE)[x2,] + 1)
+mat <- log2(assays(dat_control)$hk_norm[x2,] + 1)
+rownames(mat) <- rowData(dat_control)$symbol[x2]
+colnames(mat) <- gsub("NA ", "", with(colData(dat_control), paste0(mcc.id, " ", gsub("_", " ", type)))) 
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column_control,
              row_names_gp = gpar(fontsize = 7),
              col = ecolors, column_dend_reorder=TRUE,
              row_dend_reorder=TRUE)
@@ -1094,6 +1211,24 @@ ht = Heatmap(mat, name = "VS counts",
 
 draw(ht)
 ```
+
+Now including control lines. 
+
+```{r heatmap-goi-vs-patrick-revised-withcontrollines, fig.width=9, fig.height=8, fig.path='plots/', dev=c("png")}
+# subset counts of transformed (and normalized) counts
+mat <- assay(vst(dat_control))[x2,]
+rownames(mat) <- rowData(dat_control)$symbol[x2]
+colnames(mat) <- gsub("NA ", "", with(colData(dat_control), paste0(mcc.id, " ", gsub("_", " ", type)))) 
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column_control,
+             row_names_gp = gpar(fontsize = 7),
+             col = ecolors,column_dend_reorder=TRUE,
+             row_dend_reorder=TRUE)
+
+draw(ht)
+```
+
 
 
 # Characterizing ORF screen genes of interest
