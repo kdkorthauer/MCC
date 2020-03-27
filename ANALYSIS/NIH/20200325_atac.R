@@ -59,7 +59,7 @@ maxy <- c(16,20,20,24,18,
   # "HLA-G" "B2M" "TAP1"  "TAP2" "TAPBP"
           10,80,55,40,36,
   # "PSMB8" "PSMB9" "NLRC5-201" "NLRC5-203" "NLRC5-217"    
-          50,60,45,45,45,
+          50,60,45,10,10,
   # "GAPDH" "ACTB" 
           100,60)
 
@@ -103,7 +103,7 @@ for (gene in genelist){
         transcript=genetab$gene,
         rotation.title=0,
         cex.title=0.33)
-    
+
     # get chr drawing 
     itrackfile <- file.path(paste0("/scratch/st-kdkortha-1/MCC/tmp/itrack_", 
         chr, ".rds"))
