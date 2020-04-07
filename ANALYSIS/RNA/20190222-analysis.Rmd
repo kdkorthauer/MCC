@@ -1595,8 +1595,23 @@ if(file.exists(viralquant_file)){
    ggtitle("Reads mapping to viral RNA")
  
  print(p)
- 
  ggsave(file.path("plots", "viralRNAcounts.pdf"), width = 5, height = 3.5)
+ 
+ # remove 286 and reorder 350, 290, 336, 358, 282, 301, 367, 2314, 277
+ viral <- filter(viral, mcc.id != "286")
+ viral$mcc.id <- as.factor(as.character(viral$mcc.id))
+ neword <- c("350", "290", "336", "358", "282", 
+                "301", "367", "2314", "277")
+ x <- match(neword, levels(viral$mcc.id))
+ viral$mcc.id <- factor(viral$mcc.id, levels(viral$mcc.id)[x])
+ 
+ p <- ggplot(viral, aes(x = mcc.id, y = count, fill = type)) +
+   geom_col(position = "dodge") +
+   xlab("MCC ID") +
+   ylab("MCC Polyomavirus RNA count (normalized)")+
+   ggtitle("Reads mapping to viral RNA")
+ print(p)
+ ggsave(file.path("plots", "viralRNAcounts_reordered.pdf"), width = 5, height = 3.5)
 }
 ```
 
