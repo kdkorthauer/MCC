@@ -421,6 +421,11 @@ pdf(heatmap.file)
    draw(ht)
 dev.off()
 
+# save these results to file
+colnames(averagedSignal)[1] <- "gene"
+write.table(format(averagedSignal[y,], digits=3), row.names=FALSE, quote=FALSE, 
+  sep="\t", file=file.path(out.dir, "avgPromoterMethylation_subsetAPM.txt"))
+
 # ordered by dmr signal in virus pos vs neg
 byGroupAvg <- cbind(rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Positive")), 
   rowMeans(subset(averagedSignal[y,-1], select = pData(bs)$virus == "Negative"))
