@@ -141,6 +141,22 @@ viralneg <- c("286", "350", "290", "282", "320")
 colDat$virus <- "pos"
 colDat$virus[colDat$mcc.id %in% viralneg] <- "neg"
 colDat$virus <- as.factor(colDat$virus)
+
+ifn.map <- rbind(c("275", NA),
+                 c("282", 6),
+                 c("290", 7),
+                 c("301", 5),
+                 c("320", 4),
+                 c("336", 2),
+                 c("350", 1),
+                 c("367", 8),
+                 c("2314", 3))
+ifn.map <- data.frame(ifn.map)
+colnames(ifn.map) <- c("id1", "ifn")
+ifn.map$ifn <- as.numeric(ifn.map$ifn)
+x <- match(colDat$mcc.id, ifn.map$id1)
+
+colDat$ifn <- ifelse(ifn.map$ifn[x] <= 4, "Responsive", "Non_responsive")
 ```
 
 Finally, we'll construct a DESeq dataset.
@@ -153,7 +169,7 @@ dat <- DESeqDataSetFromMatrix(countData = exp,
 
 # including control lines
 dat_control <- DESeqDataSetFromMatrix(countData = cbind(exp, exp_control),
-                              colData = rbind(colDat, colDat_control),
+                              colData = rbind(colDat[,-6], colDat_control),
                               rowData = rowDat,
                               design = ~ type)
 ```
@@ -2058,7 +2074,7 @@ plotGseaTable(goSets[mainPathways], stats, goRes,
 ### Overlap with immune Genes of Interest
 
 Here we examine the fold changes and significance of differential expression between
-the tumor and cell lines for the genes of interest.
+viral positive and viral negative for the genes of interest.
 
 ```{r}
 df <- data.frame(res) %>%  
@@ -2110,6 +2126,215 @@ p <- ggplot(data = df, aes(log2FoldChange, pvalue, color = DE.01)) +
                aes(label = symbol), color = "black", size = 3)
 p
 ggsave(file.path("plots", "volcano_de01_goi_viral.pdf"), plot = p, width = 7, height = 5)
+```
+
+
+## Difference between IFN responsive and non-responsive
+
+We'll use DESeq2 to perform standard differential expression between the 
+IFN responsive and non-responsive samples. We'll adjust for cell line / tumor
+origin and viral status as covariates.
+
+```{r volcanoIFNstatus, fig.path='plots/', dev=c('png')}
+
+# filter for samples that have ifn repsonsive vals
+dat <- dat[,!is.na(colData(dat)$ifn)]
+
+colData(dat)$ifn <- as.factor(colData(dat)$ifn)
+
+design(dat) <- ~ W + type  + virus + ifn
+dat <- DESeq(dat)
+
+res <- results(dat)
+vsd = vst(dat)
+
+sum(res$padj < 0.01, na.rm = TRUE)
+
+head(res)
+
+data.frame(res) %>%  
+  filter(!is.na(padj)) %>% 
+  mutate(pvalue = -log10(pvalue)) %>%
+  mutate(DE.01 = padj < 0.01) %>%
+  ggplot(aes(log2FoldChange, pvalue, color = DE.01)) +
+    geom_point(alpha = 0.4) +
+    ylab("-log10(p-value)") + 
+    scale_colour_manual(values = c("black", "darkorange"))
+ggsave(file.path("plots", "volcano_de01_ifnresponse.pdf"), width = 5, height = 4)
+
+# write to file
+write.table(res, "plots/deseq2_ifnresponsive.txt", quote=FALSE, row.names=TRUE,
+  sep="\t")
+```
+
+There are `r sum(res$padj < 0.01, na.rm = TRUE)` DE genes at FDR 0.01. 
+`r sum(res$padj < 0.01 & abs(res$log2FoldChange) > 2, na.rm = TRUE)` also have log2 fold change of at least 2. 
+Here is a 
+heatmap of those genes, first for log2 normalized counts:
+
+```{r heatmap-DE-l2n-0.01-ifnresponse, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png')}
+mat <- log2(counts(dat, normalize=TRUE)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ] + 1)
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+ha_column = HeatmapAnnotation(df = data.frame(Type = colData(dat)[, c("type")],
+                                              Virus = colData(dat)[, c("virus")],
+                                              ID = colData(dat)[, c("mcc.id")],
+                                              IFN = colData(dat)[, c("ifn")]),
+                              col = list(Type = c(Cell_line="lightgrey", Tumor="black"), 
+                                         Virus = c(pos = "#543005", neg = "#DFC27D"),
+                                         ID = cols2,
+                                         IFN = c(Responsive="red", 
+                                                 Non_responsive="blue")))
+
+ht = Heatmap(mat, name = "log2\nNormed\ncounts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+``` 
+
+Next for vs-transformed counts.
+
+```{r heatmap-DE-vs-0.01-ifnresponse, fig.width=8.5, fig.height=7, fig.path='plots/', dev=c('png')}
+mat <- assay(vsd)[res$padj < 0.01 & !is.na(res$padj) & abs(res$log2FoldChange) > 2, ]
+colnames(mat) <- with(colData(dat), paste0(mcc.id, " ", gsub("_", " ", type))) 
+
+
+ht = Heatmap(mat, name = "VS counts", 
+             top_annotation = ha_column,
+             show_row_names = FALSE,
+             clustering_distance_rows = "euclidean",
+             clustering_distance_columns = "euclidean",
+             col = ecolors)
+draw(ht)
+``` 
+
+### GSEA
+
+To understand what groups of genes exist in this set, we'll perform a Gene-set
+Enrichment analysis. First we’ll use the biomaRt package to download and 
+associate GO annotations for each gene. 
+
+```{r gocat-ifnresponse, message=FALSE}
+mart <- useMart("ensembl", "hsapiens_gene_ensembl")
+goSets <- getBM(c("ensembl_gene_id", "go_id"), mart = mart,
+				filters = "ensembl_gene_id", 
+				values = unlist(lapply(strsplit(rownames(res), "\\."), 
+				                       function(x) x[1])))
+desc <- Term(goSets$go_id)
+goSets$go_id <- paste0(goSets$go_id, " - ", desc)
+goSets <- goSets[!nchar( goSets$go_id ) == 0, ]
+goSets <- with(goSets, split(go_id, ensembl_gene_id))
+```
+
+Now we'll perform the GSEA with fgsea
+
+```{r}
+gsea_file <- file.path("results", "gsea-ifnresponse.rds")
+goSets <- split(rep(names(goSets), lengths(goSets)), unlist(goSets))
+stats <- res$stat
+names(stats) <- unlist(lapply(strsplit(rownames(res), "\\."), 
+				                       function(x) x[1]))
+stats <- stats[!is.na(stats)]
+
+if (!file.exists(gsea_file) || overwrite) {
+  goRes <- fgsea(goSets, 
+                  stats, 
+                  nperm=10000, 
+                  maxSize=500,
+                  minSize=5)  
+  saveRDS(goRes, file = gsea_file)
+} else {
+  goRes <- readRDS(gsea_file)
+}
+
+head(goRes[order(pval), ])
+sum(goRes[, padj < 0.05])
+```
+
+Here we visualize the top pathways:
+
+```{r gsea-ifnresponse, fig.width=8, fig.height=9, fig.path='plots/', dev=c('png'), warning = FALSE, message = FALSE}
+topPathwaysUp <- goRes[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- goRes[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+plotGseaTable(goSets[topPathways], stats, goRes, 
+              gseaParam = 0.5,  
+              colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
+```
+
+One of the top categories that DE genes between IFN responsive and non-responsive are overrepresented is related to MHC Class II.
+
+Since many of these pathways are related and overlapping, we also try collapsing
+into independent pathways:
+
+```{r gsea-collapsed-ifnresponse, fig.width=8, fig.height=9, fig.path='plots/', warning = FALSE, message = FALSE, dev=c('png')}
+collapsedPathways <- collapsePathways(goRes[order(pval)][padj < 0.05], 
+                                      goSets, stats)
+mainPathways <- goRes[pathway %in% collapsedPathways$mainPathways][
+                         order(-NES), pathway][1:20]
+plotGseaTable(goSets[mainPathways], stats, goRes, 
+              gseaParam = 0.5,
+              colwidths = c(9, 4.5, 1.2, 1.7, 1.7))
+```
+
+### Overlap with immune Genes of Interest
+
+Here we examine the fold changes and significance of differential expression between
+IFN responsive and non-responsive for the genes of interest.
+
+```{r}
+df <- data.frame(res) %>%  
+  mutate(description = rowData(dat)$description,
+         symbol = rowData(dat)$symbol) %>%
+  filter(!is.na(padj)) %>% 
+  mutate(pvalue = -log10(pvalue)) %>%
+  mutate(DE.01 = padj < 0.01)
+  
+knitr::kable((df %>% filter(!is.na(description)) %>% arrange(-pvalue))[,-c(1,3,4,5)])
+
+```
+
+`r sum(df$DE.01 & !is.na(df$description))` out of 
+`r sum(!is.na(df$description))` genes of interest (
+`r signif(100*sum(df$DE.01 & !is.na(df$description))/sum(!is.na(df$description)),3)`%) 
+are DE at the 0.01 FDR level. This is compared to 
+`r signif(100*sum(df$DE.01)/nrow(df),3)`% genes overall
+(`r sum(df$DE.01)` out of 
+`r nrow(df)`). 
+
+In particular, note that this quantity broken down by category is:
+
+* `r sum(df$DE.01 & df$description == "MCC Marker" & !is.na(df$description))` out of 
+`r sum(df$description == "MCC Marker" & !is.na(df$description))` MCC Marker genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "MCC Marker")/sum(df$description == "MCC Marker" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "MAPK Pathway" & !is.na(df$description))` out of 
+`r sum(df$description == "MAPK Pathway" & !is.na(df$description))` MAPK Pathway genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "MAPK Pathway")/sum(df$description == "MAPK Pathway" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "Class I" & !is.na(df$description))` out of 
+`r sum(df$description == "Class I" & !is.na(df$description))` Class I genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "Class I")/sum(df$description == "Class I" & !is.na(df$description)),3)`%)
+
+* `r sum(df$DE.01 & df$description == "Class II" & !is.na(df$description))` out of 
+`r sum(df$description == "Class II" & !is.na(df$description))` Class II genes 
+(`r signif(100*sum(df$DE.01 & !is.na(df$description) & df$description == "Class II")/sum(df$description == "Class II" & !is.na(df$description)),3)`%)
+
+We'll visualize the genes of interest on the volcano plot.
+
+```{r volcanogoiifnresponse, fig.path='plots/', dev=c('png')}
+p <- ggplot(data = df, aes(log2FoldChange, pvalue, color = DE.01)) +
+    geom_point(alpha = 0.4) +
+    ylab("-log10(p-value)") + 
+    scale_colour_manual(values = c("black", "darkorange")) +
+    geom_point(data = df %>% filter(!is.na(description)), color = "red") +
+    geom_label_repel(data = df %>% filter(!is.na(description)) %>% filter(DE.01), 
+               aes(label = symbol), color = "black", size = 3)
+p
+ggsave(file.path("plots", "volcano_de01_goi_ifnresponse.pdf"), plot = p, width = 7, height = 5)
 ```
 # Session Information
 

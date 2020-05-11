@@ -39,6 +39,10 @@ sampsheet <- data.frame(SampleID=names(resp),
 
 # exclude 275/277
 sampsheet <- sampsheet[!sampsheet$SampleID == "275",]
+sampsheet2 <- sampsheet[,-4]
+sampsheet2$Peaks <- gsub(".xls", "", basename(as.character(sampsheet2$Peaks)))
+write.table(sampsheet2, file = "plots/atac_metadata.txt", 
+  sep="\t", quote=FALSE, row.names=FALSE)
 
 if(!file.exists("plots/ATAC_DiffPeaks_Viral.rds") | 
    !file.exists("plots/ATAC_DiffPeaks_IFNgResp.rds") ){
