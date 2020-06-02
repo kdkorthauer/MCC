@@ -600,7 +600,7 @@ plotpairs <- function(mat, main = ""){
 }
 
 
-mat <- data.frame(counts(dat, normalize = TRUE)+1)
+mat <- data.frame(log2(counts(dat, normalize = TRUE)+1))
 x2 <- match(as.numeric(gsub(".C|.T|.CL", "", gsub("DFCI.", "", colnames(mat)))), id.map$id1)
 colnames(mat) <- paste0(ifelse(grepl("T", colnames(mat)), "T-", "C-"), id.map$id2[x2])
 
@@ -624,6 +624,49 @@ plotpairs(mat[, grepl(paste0(viralneg, collapse = "|"), colnames(mat))],
 # for everything
 plotpairs(mat, 
           main = "Correlation of All Samples")
+
+```
+
+Pairwise spearman correlations for vst expression
+
+```{r}
+dist_sp <- usedist::dist_make(t(assay(vsd[,-which(grepl("DFCI.5370.T", colnames(vsd)))])), 
+  distance_fcn = cor, method = "spearman")
+dist_sp <- as.matrix(dist_sp)
+diag(dist_sp) <- NA
+
+pairs_ix <- other_ix <- matrix(0, nrow=nrow(dist_sp), ncol=ncol(dist_sp))
+for (i in seq_along(rownames(dist_sp))){
+  for (j in seq_along(colnames(dist_sp))){
+    if(i < j){
+      if( gsub("\\.C|\\.T|\\.CL", "", rownames(dist_sp))[i] ==
+          gsub("\\.C|\\.T|\\.CL", "", colnames(dist_sp))[j]  ){
+        pairs_ix[i,j] <- 1
+      }else{
+        other_ix[i,j] <- 1
+      }
+    }
+  }
+}
+
+dist_sp[which(pairs_ix==1, arr.ind=TRUE)]
+ 
+cordf <- data.frame(
+  type = factor(c(rep("C+T pair", sum(pairs_ix)), 
+                          rep("Other", sum(other_ix)))),
+  spearman = c(dist_sp[which(pairs_ix==1, arr.ind=TRUE)], 
+               dist_sp[which(other_ix==1, arr.ind=TRUE)])
+  )
+
+
+ggplot(cordf, aes(x=type, y=spearman)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha=0.2) + 
+  xlab("Pair type") +
+  ylab("Spearman rank correlation")
+ggsave(file="plots/pairwise_spearman.pdf", width=5, height=4)
+
+t.test(cordf$spearman[cordf$type=="C+T pair"], cordf$spearman[cordf$type=="Other"])
 
 ```
 
