@@ -390,6 +390,35 @@ heatmap.2(d, symm=TRUE,
   cellnote=dispvals)
 ```
 
+## Alternate similarity metric: Percentage CL mutations also observed in T
+
+Here is an alternate metric that excludes mutations only present in tumor (as many of these are likely artefacts, especially for pdx samples).
+
+```{r}
+# construct df with each row indicating indices of columns in
+# mat_maf that correspond to a T:CL pair
+
+pair_ix <- rbind(c(1,2),
+                 c(3,4),
+                 c(5,6),
+                 c(7,8),
+                 c(9,10),
+                 c(11,12),
+                 c(13,14))
+
+pct_CL <- vector(mode="numeric", nrow(pair_ix))
+names(pct_CL) <- unlist(apply(pair_ix, 1, 
+  function(x) paste0(colnames(mat_maf)[x], collapse=":")))
+for (p in seq_len(nrow(pair_ix))){
+  pct_CL[p] <- sum(mat_maf[pair_ix[p,1]] == 1 & mat_maf[pair_ix[p,2]] == 1) /
+               sum(mat_maf[pair_ix[p,1]] == 1)
+}
+
+write.table(signif(pct_CL,3), quote=FALSE, file="plots/WES_percent_CL_muts_in_T.txt",
+  sep="\t", col.names=FALSE)
+
+```
+
 
 # Session Information
 
