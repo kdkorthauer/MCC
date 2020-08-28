@@ -1,15 +1,12 @@
 # script to filter out murine reads to remove contamination from pdx samples
 
 module load samtools
-module load bwa
 
 cd ../../../PREPROCESS/DNA/
 export DATDIR=../../DATA/DNA
 export FILTDIR=pdx_filter
 mkdir -p $FILTDIR
 mkdir -p $FILTDIR/fastq
-mkdir -p $FILTDIR/bwa
-mkdir -p $FILTDIR/disambiguate
 mkdir -p $FILTDIR/cleanbam
 mkdir -p $FILTDIR/xengsort
 
@@ -35,7 +32,7 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
            -J bam2fastq_n \
            -n 1 \
            -N 1 \
-           --mem 40G \
+           --mem 20G \
            -t 0-20:00 \
            --wrap="java -jar /homes/keegan/picard-2.23.2/picard.jar SamToFastq \
       I=$DATDIR/$NORMAL_BAM \
@@ -49,7 +46,7 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
            -J bam2fastq_t \
            -n 1 \
            -N 1 \
-           --mem 40G \
+           --mem 20G \
            -t 0-20:00 \
            --wrap="java -jar /homes/keegan/picard-2.23.2/picard.jar SamToFastq \
       I=$DATDIR/$TUMOR_BAM \
@@ -63,7 +60,7 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
            -J bam2fastq_c \
            -n 1 \
            -N 1 \
-           --mem 40G \
+           --mem 20G \
            -t 0-20:00 \
            --wrap="java -jar /homes/keegan/picard-2.23.2/picard.jar SamToFastq \
       I=$DATDIR/$CELLLINE_BAM \
@@ -72,19 +69,7 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
   fi
 done
 
-# 2. index hg19 and mm10
-
-  # index file from https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
-
-bwa index ./annotation/hg19.fa.gz
-
-   # index file from https://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/mm10.fa.gz
-
-bwa index ./annotation/mm10.fa.gz
-
-########
-
-# xengsort index
+# 2. index hg19 and mm10 for xengsort
 
 export TOPLEVEL_HUMAN=Homo_sapiens.GRCh38.dna.toplevel.fa.gz
 export TOPLEVEL_HUMAN_DOWNLOAD=ftp://ftp.ensembl.org/pub/release-98/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.toplevel.fa.gz
@@ -117,6 +102,18 @@ export mouse_tl=$REFPATH/$TOPLEVEL_MOUSE
 export human_cdna=$REFPATH/$CDNA_HUMAN
 export mouse_cdna=$REFPATH/$CDNA_MOUSE
 
+echo -e '#!/bin/bash
+
+xengsort index $REFPATH/xengsort_index-k25.h5 \
+  -H <(zcat $human_tl) <(zcat $human_cdna) \
+  -G <(zcat $mouse_tl) <(zcat $mouse_cdna) \
+  -k 25 -P 4800000000 3FCVbb:u \
+  --hashfunctions linear945:linear9123641:linear349341847 \
+  -p 4 --fill 0.94 -T 8 \
+  &> $REFPATH/index.log
+' > xengsort-index.sh
+
+
 conda activate xengsort
 
 if [ ! -f $REFPATH/xengsort_index-k25.h5 ]; then
@@ -131,198 +128,8 @@ if [ ! -f $REFPATH/xengsort_index-k25.h5 ]; then
     sleep 1 
 fi
 
-echo -e '#!/bin/bash
 
-xengsort index $REFPATH/xengsort_index-k25.h5 \
-  -H <(zcat $human_tl) <(zcat $human_cdna) \
-  -G <(zcat $mouse_tl) <(zcat $mouse_cdna) \
-  -k 25 -P 4800000000 3FCVbb:u \
-  --hashfunctions linear945:linear9123641:linear349341847 \
-  -p 4 --fill 0.94 -T 8 \
-  &> $REFPATH/index.log
-' > xengsort-index.sh
-
-########
-
-
-# 3. align each bam file to both hg19 and mm10
-
-for id in 5350 5351 5367 5368 5369 5473 5474; do
-  echo "Mapping for ${id}"
-
-  export NORMAL=DFCI-${id}-N-01
-  export TUMOR=DFCI-${id}-T-01
-  export CELLLINE=DFCI-${id}-CL-01
-  export CELLLINE2=DFCI-${id}-CL-01
-
-  if [ $id = "5350" ] || [ $id = "5351" ] || [ $id = "5473" ] || [ $id = "5474" ]; then
-    export CELLLINE2=DFCI-${id}-C-01
-  fi
-
-  if [ ! -f $FILTDIR/bwa/$TUMOR\_human.bam ]; then
-    sbatch -o ../slurm/${id}-tumor-human.out \
-           -e ../slurm/${id}-tumor-human.err \
-           -J map_tumor_human \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-40:00 \
-           --wrap="bwa mem \
-               ../../PREPROCESS/DNA/annotation/hg19.fa.gz \
-               $FILTDIR/fastq/$TUMOR\_1.fastq \
-               $FILTDIR/fastq/$TUMOR\_2.fastq > \
-               $FILTDIR/bwa/$TUMOR\_human.sam && \
-             samtools sort -o $FILTDIR/bwa/$TUMOR\_human.bam \
-               $FILTDIR/bwa/$TUMOR\_human.sam"
-    sleep 1 
-  fi
-  
-  if [ ! -f $FILTDIR/bwa/$TUMOR\_mouse.bam ]; then
-    sbatch -o ../slurm/${id}-tumor-mouse.out \
-           -e ../slurm/${id}-tumor-mouse.err \
-           -J map_tumor_mouse \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-40:00 \
-           --wrap="bwa mem \
-               ../../PREPROCESS/DNA/annotation/mm10.fa.gz \
-               $FILTDIR/fastq/$TUMOR\_1.fastq \
-               $FILTDIR/fastq/$TUMOR\_2.fastq > \
-               $FILTDIR/bwa/$TUMOR\_mouse.sam && \
-             samtools sort -o $FILTDIR/bwa/$TUMOR\_mouse.bam \
-               $FILTDIR/bwa/$TUMOR\_mouse.sam"
-    sleep 1 
-  fi
-
-  if [ ! -f $FILTDIR/bwa/$NORMAL\_human.bam ]; then
-  	sbatch -o ../slurm/${id}-normal-human.out \
-           -e ../slurm/${id}-normal-human.err \
-           -J map_normal_human \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-40:00 \
-           --wrap="bwa mem \
-               ../../PREPROCESS/DNA/annotation/hg19.fa.gz \
-               $FILTDIR/fastq/$NORMAL\_1.fastq \
-               $FILTDIR/fastq/$NORMAL\_2.fastq > \
-               $FILTDIR/bwa/$NORMAL\_human.sam && \
-             samtools sort -o $FILTDIR/bwa/$NORMAL\_human.bam \
-               $FILTDIR/bwa/$NORMAL\_human.sam"
-  fi
-
-  if [ ! -f $FILTDIR/bwa/$NORMAL\_mouse.bam ]; then
-    sbatch -o ../slurm/${id}-normal-mouse.out \
-           -e ../slurm/${id}-normal-mouse.err \
-           -J map_normal_human \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-40:00 \
-           --wrap="bwa mem \
-               ./../PREPROCESS/DNA/annotation/mm10.fa.gz \
-               $FILTDIR/fastq/$NORMAL\_1.fastq \
-               $FILTDIR/fastq/$NORMAL\_2.fastq > \
-               $FILTDIR/bwa/$NORMAL\_mouse.sam && \
-             samtools sort -o $FILTDIR/bwa/$NORMAL\_mouse.bam \
-               $FILTDIR/bwa/$NORMAL\_mouse.sam"
-  fi
-
-  if [ ! -f $FILTDIR/bwa/$CELLLINE\_human.bam ]; then
-  	sbatch -o ../slurm/${id}-cl-human.out \
-           -e ../slurm/${id}-cl-human.err \
-           -J map_cl_human \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-40:00 \
-           --wrap="bwa mem \
-               ../../PREPROCESS/DNA/annotation/hg19.fa.gz \
-               $FILTDIR/fastq/$CELLLINE2\_1.fastq \
-               $FILTDIR/fastq/$CELLLINE2\_2.fastq > \
-               $FILTDIR/bwa/$CELLLINE\_human.sam && \
-             samtools sort -o $FILTDIR/bwa/$CELLLINE\_human.bam \
-               $FILTDIR/bwa/$CELLLINE\_human.sam"
-  fi
-
-  if [ ! -f $FILTDIR/bwa/$CELLLINE\_mouse.bam ]; then
-    sbatch -o ../slurm/${id}-cl-mouse.out \
-           -e ../slurm/${id}-cl-mouse.err \
-           -J map_cl_human \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-40:00 \
-           --wrap="bwa mem \
-               ../../PREPROCESS/DNA/annotation/mm10.fa.gz \
-               $FILTDIR/fastq/$CELLLINE2\_1.fastq \
-               $FILTDIR/fastq/$CELLLINE2\_2.fastq > \
-               $FILTDIR/bwa/$CELLLINE\_mouse.sam && \
-             samtools sort -o $FILTDIR/bwa/$CELLLINE\_mouse.bam \
-               $FILTDIR/bwa/$CELLLINE\_mouse.sam"
-  fi
-
-done
-
-
-
-# 5. use disambiguate to remove reads aligning to mm10
-
-conda activate local
-
-for id in 5350 5351 5367 5368 5369 5473 5474; do
-  echo "Getting fastq for Tumor and Normal for ${id}"
-  export NORMAL=DFCI-${id}-N-01
-  export TUMOR=DFCI-${id}-T-01
-  export CELLLINE=DFCI-${id}-CL-01
-
-  for TYPE in $NORMAL $TUMOR $CELLLINE; do
-    if [ ! -f $FILTDIR/disambiguate/$TYPE\_summary.txt ]; then
-      sbatch -o ../slurm/disambiguate-${TYPE}.out \
-           -e ../slurm/disambiguate-${TYPE}.err \
-           -J disamb-${TYPE} \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-8:00 \
-           --wrap="ngs_disambiguate -a bwa \
-                   --prefix $TYPE \
-                   --output-dir $FILTDIR/disambiguate \
-                   $FILTDIR/bwa/$TYPE\_human.bam \
-                   $FILTDIR/bwa/$TYPE\_mouse.bam"
-    fi 
-  done
-
-done
-
-
-for id in 5350 5351 5367 5368 5369 5473 5474; do
-  echo "Getting fastq for Tumor and Normal for ${id}"
-  export NORMAL=DFCI-${id}-N-01
-  export TUMOR=DFCI-${id}-T-01
-  export CELLLINE=DFCI-${id}-CL-01
-
-  for TYPE in $NORMAL $TUMOR $CELLLINE; do
-    if [ ! -f $FILTDIR/xenofilter/$TYPE\_summary.txt ]; then
-      sbatch -o ../slurm/xenofilter-${TYPE}.out \
-           -e ../slurm/xenofilter-${TYPE}.err \
-           -J disamb-${TYPE} \
-           -n 1 \
-           -N 1 \
-           --mem 40G \
-           -t 0-8:00 \
-           --wrap="perl /homes/keegan/XenofilteR/original/xenofilt_PE.pl \
-             $FILTDIR/bwa/$TYPE\_human.bam \
-             $FILTDIR/bwa/$TYPE\_mouse.bam"
-    fi 
-  done
-
-done
-
-
-###########
-
+# 3. Use xengsort to classify each read 
 
 
 for id in 5350 5351 5367 5368 5369 5473 5474; do
@@ -358,14 +165,42 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
 done
 
 
-#########
+# 4. get throw away read names
 
+echo -e '#!/bin/bash
+' > get-throw.sh
 
+echo -e "awk 'NR%4==1 {print substr(\$1,2)}' \\
+  \$FILTDIR/xengsort/\$TYPE-ambiguous.1.fq \\
+  | sed 's/..$//' \\
+  > \$FILTDIR/xengsort/\$TYPE-readnames_throw.txt \\
 
+echo grabbed read names
+" >> get-throw.sh
 
+echo -e "awk 'NR%4==1 {print substr(\$1,2)}' \\
+  \$FILTDIR/xengsort/\$TYPE-both.1.fq \\
+  | sed 's/..$//' \\
+  >> \$FILTDIR/xengsort/\$TYPE-readnames_throw.txt \\
 
-# 6. filter original bam file by read name (keep original alignment) 
-#    to only keep reads that didn't align to mm10 in step 5
+echo grabbed read names
+" >> get-throw.sh
+
+echo -e "awk 'NR%4==1 {print substr(\$1,2)}' \\
+  \$FILTDIR/xengsort/\$TYPE-graft.1.fq \\
+  | sed 's/..$//' \\
+  >> \$FILTDIR/xengsort/\$TYPE-readnames_throw.txt \\
+
+echo grabbed read names
+" >> get-throw.sh
+
+echo -e "awk 'NR%4==1 {print substr(\$1,2)}' \\
+  \$FILTDIR/xengsort/\$TYPE-neither.1.fq \\
+  | sed 's/..$//' \\
+  >> \$FILTDIR/xengsort/\$TYPE-readnames_throw.txt \\
+
+echo grabbed read names
+" >> get-throw.sh
 
 
 for id in 5350 5351 5367 5368 5369 5473 5474; do
@@ -374,11 +209,64 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
   export TUMOR=DFCI-${id}-T-01
   export CELLLINE=DFCI-${id}-CL-01
 
-  if [ $id = "5350" ] || [ $id = "5351" ]; then
+  if [ $id = "5350" ] || [ $id = "5351" ] || [ $id = "5473" ] || [ $id = "5474" ]; then
     export CELLLINE=DFCI-${id}-C-01
   fi
 
   for TYPE in $NORMAL $TUMOR $CELLLINE; do
+    export TYPE
+    if [ ! -f $FILTDIR/xengsort/$TYPE-readnames_throw.txt ]; then
+      sbatch -o ../slurm/filter-${TYPE}.out \
+           -e ../slurm/filter-${TYPE}.err \
+           -J filter-${TYPE} \
+           -n 1 \
+           -N 1 \
+           --mem 20G \
+           -t 0-6:00 \
+           get-throw.sh
+    fi 
+  done
+done
+
+-rw-r--r-- 1 keegan 6.9M Aug 17 23:50 DFCI-5350-C-01-ambiguous.1.fq
+-rw-r--r-- 1 keegan  23M Aug 17 23:50 DFCI-5350-C-01-both.1.fq
+-rw-r--r-- 1 keegan 1.1M Aug 17 23:50 DFCI-5350-C-01-graft.1.fq
+-rw-r--r-- 1 keegan  49M Aug 17 23:50 DFCI-5350-C-01-neither.1.fq
+
+# clean up 
+# rm $FILTDIR/xengsort/*fq
+
+# 5. filter original bam file by read name (keep original alignment) 
+#    to only keep reads that didn't align to mm10 in step 5
+
+echo -e '#!/bin/bash
+' > filter-bams.sh
+
+echo -e "
+java -jar /homes/keegan/picard-2.23.2/picard.jar \\
+  FilterSamReads \\
+  I=/rafalab/jill/MCC/DATA/DNA/\$TYPE.bam \\
+  O=\$FILTDIR/cleanbam/\$TYPE.bam \\
+  READ_LIST_FILE=\$FILTDIR/xengsort/\$TYPE-readnames_throw.txt \\
+  MAX_RECORDS_IN_RAM=100000 \\
+  FILTER=excludeReadList
+
+echo filtering complete
+" >> filter-bams.sh
+
+
+for id in 5350 5351 5367 5368 5369 5473 5474; do
+  echo "Getting fastq for Tumor and Normal for ${id}"
+  export NORMAL=DFCI-${id}-N-01
+  export TUMOR=DFCI-${id}-T-01
+  export CELLLINE=DFCI-${id}-CL-01
+
+  if [ $id = "5350" ] || [ $id = "5351" ] || [ $id = "5473" ] || [ $id = "5474" ]; then
+    export CELLLINE=DFCI-${id}-C-01
+  fi
+
+  for TYPE in $NORMAL $TUMOR $CELLLINE; do
+    export TYPE
     if [ ! -f $FILTDIR/cleanbam/$TYPE.bam ]; then
       sbatch -o ../slurm/filter-${TYPE}.out \
            -e ../slurm/filter-${TYPE}.err \
@@ -386,25 +274,15 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
            -n 1 \
            -N 1 \
            --mem 40G \
-           -t 0-6:00 \
-           --wrap="samtools view \
-               $FILTDIR/disambiguate/$TYPE\.disambiguatedSpeciesA.bam | \
-               cut -f 1 > $FILTDIR/disambiguate/$TYPE\.readnames_keep.txt && \
-             java -jar /homes/keegan/picard-2.23.2/picard.jar \
-               FilterSamReads \
-               I=$DATDIR/$TYPE.bam\
-               O=$FILTDIR/cleanbam/$TYPE.bam \
-               READ_LIST_FILE=$FILTDIR/disambiguate/$TYPE\.readnames_keep.txt \
-               FILTER=includeReadList"
+           -t 0-10:00 \
+           filter-bams.sh
     fi 
   done
 done
 
 # 7. clean up
 
-# delete tmp fastq files & remapped bams
+# delete tmp fastq files
 rm $FILTDIR/fastq/*.fastq
-rm $FILTDIR/bwa/*.bam
-rm $FILTDIR/bwa/*.sam
 
 # 8. continue with Mutect2 pipeline using filtered bams
