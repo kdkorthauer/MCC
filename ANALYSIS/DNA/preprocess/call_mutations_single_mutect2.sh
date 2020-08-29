@@ -6,8 +6,9 @@
 #SBATCH -t 0-40:00
 
 cd ../../../PREPROCESS/DNA/
-RESDIR=mutect2-gatk4.1.2.0-results
+RESDIR=mutect2-gatk4.1.2.0-results-xengsort
 mkdir -p $RESDIR
+
 #GATK=/n/irizarryfs01_backed_up/kkorthauer/softwareTools/gatk
 GATK=""
 #module load jdk/1.8.0_45-fasrc01
@@ -16,6 +17,8 @@ module load samtools
 module load bcftools
 module load perl
   # gatk Mutect2 --help
+
+ulimit -c unlimited
 
 ################
 # build PoN
@@ -30,7 +33,6 @@ else
 fi
 
 # create somatic panel of normals
-# not really sure what GenomicsDBImport is doing; can't get it to work
 if [ \( -f $RESDIR/DFCI-5350-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5351-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5367-N-01.vcf \) ] ; then
@@ -38,7 +40,6 @@ if [ \( -f $RESDIR/DFCI-5368-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5369-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5473-N-01.vcf \) ] ; then
 if [ \( -f $RESDIR/DFCI-5474-N-01.vcf \) ] ; then
-if [ \( -f $RESDIR/DFCI-MCC-001-N-01.vcf \) ] ; then
 if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
   
   gatk GenomicsDBImport \
@@ -50,8 +51,7 @@ if [ ! \( -f $RESDIR/pon.vcf.gz \) ] ; then
    -V $RESDIR/DFCI-5351-N-01.vcf \
    -V $RESDIR/DFCI-5473-N-01.vcf \
    -V $RESDIR/DFCI-5474-N-01.vcf \
-   -V $RESDIR/DFCI-MCC-001-N-01.vcf \
-   --genomicsdb-workspace-path pon_db \
+   --genomicsdb-workspace-path pon_db_pdx \
    --merge-input-intervals \
    -L annotation/whole_exome_illumina_coding_v1.Homo_sapiens_assembly19.targets.interval_list
 
@@ -67,8 +67,12 @@ fi
 fi
 fi
 fi
-fi
 fi 
+
+# index bam
+if [ ! \( -f /rafalab/.keegan/MCC/PREPROCESS/DNA/pdx_filter/cleanbam/$TUMOR_BAM\.bai \) ] ; then
+  samtools index /rafalab/.keegan/MCC/PREPROCESS/DNA/pdx_filter/cleanbam/$TUMOR_BAM
+fi
 
 # run MuTect if output file does not already exist 
 # no af filter needed: https://gatkforums.broadinstitute.org/gatk/discussion/comment/57078
@@ -80,8 +84,8 @@ if [ ! -z "$NORMAL_BAM" ]; then
   # matched normal
   gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-     -I /rafalab/keegan/MCC/DATA/DNA/$TUMOR_BAM \
-     -I /rafalab/keegan/MCC/DATA/DNA/$NORMAL_BAM \
+     -I /rafalab/.keegan/MCC/PREPROCESS/DNA/pdx_filter/cleanbam/$TUMOR_BAM \
+     -I /rafalab/.keegan/MCC/PREPROCESS/DNA/pdx_filter/cleanbam/$NORMAL_BAM \
      -tumor ${TUMOR_BAM%.*} \
      -normal ${NORMAL_BAM2%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
@@ -92,7 +96,7 @@ else
   # no matched normal
   gatk Mutect2 \
      -R annotation/GATK_bundle_b37/human_g1k_v37.fasta \
-     -I /rafalab/keegan/MCC/DATA/DNA/$TUMOR_BAM \
+     -I /rafalab/.keegan/MCC/PREPROCESS/DNA/pdx_filter/cleanbam/$TUMOR_BAM \
      -tumor ${TUMOR_BAM%.*} \
      --germline-resource annotation/GATK_bundle_b37/af-only-gnomad.raw.sites.b37.vcf \
      --panel-of-normals $RESDIR/pon.vcf.gz \
@@ -148,10 +152,10 @@ if [ ! -f $RESDIR/$(basename $TUMOR_BAM .bam)\.maf ]; then
     --tumor-id $(basename $TUMOR_BAM .bam) \
     --normal-id $(basename $NORMAL_BAM .bam) \
     --vcf-normal-id $(basename $NORMAL_BAM2 .bam) \
-    --ref-fasta /rafalab/keegan/ReferenceGenomes/.vep/homo_sapiens/95_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz \
+    --ref-fasta /rafalab/.keegan/ReferenceGenomes/.vep/homo_sapiens/95_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz \
     --vep-path ~/vep \
-    --vep-data /rafalab/keegan/ReferenceGenomes/.vep \
-    --filter-vcf /rafalab/keegan/ReferenceGenomes/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz \
+    --vep-data /rafalab/.keegan/ReferenceGenomes/.vep \
+    --filter-vcf /rafalab/.keegan/ReferenceGenomes/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz \
     --vep-forks 1
 fi
 

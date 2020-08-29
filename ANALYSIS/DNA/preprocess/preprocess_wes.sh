@@ -9,16 +9,16 @@
 module load samtools
 
 # only run once to install vcf2maf. Assumes VEP is already installed.
-if [ ! -f ../../../PREPROCESS/DNA/mskcc-vcf2maf-*/vcf2maf.pl  ]; then
+if [ ! -f ../../../PREPROCESS/DNA/mskcc-vcf2maf-7f3bd61/vcf2maf.pl  ]; then
   export VCF2MAF_URL=`curl -sL https://api.github.com/repos/mskcc/vcf2maf/releases | grep -m1 tarball_url | cut -d\" -f4`
   curl -L -o ../../PREPROCESS/DNA/mskcc-vcf2maf.tar.gz $VCF2MAF_URL
   tar -xvf ../../PREPROCESS/DNA/mskcc-vcf2maf.tar.gz -C ../../PREPROCESS/DNA/
-  chmod +x ../../PREPROCESS/DNA/mskcc-vcf2maf-*/*.pl
+  chmod +x ../../PREPROCESS/DNA/mskcc-vcf2maf-7f3bd61/*.pl
 fi
 
 # call mutations - loop over all normal samples 
 
-for id in 5350 5351 5367 5368 5369 5473 5474 MCC-001; do
+for id in 5350 5351 5367 5368 5369 5473 5474; do
 
 echo "Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
@@ -30,16 +30,13 @@ done
 ### wait until above is complete before running next steps...
 ### loop over all tumor/normal pairs
 
-for id in 5350 5351 5367 5368 5369 5473 5474 MCC-001; do
+for id in 5350 5351 5367 5368 5369 5473 5474; do
 echo "Tumor vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
 export TUMOR_BAM=DFCI-${id}-T-01.bam
 
 sbatch -o ../slurm/${id}T-std.out -e ../slurm/${id}T-std.err call_mutations_single_mutect2.sh
 sleep 1 
-
-# no cell line for MCC-001
-if [ ! \( $id = "MCC-001" \) ]; then 
 
 echo "Cell line vs Normal for ${id}"
 export NORMAL_BAM=DFCI-${id}-N-01.bam
@@ -51,8 +48,6 @@ fi
 
 sbatch -o ../slurm/${id}C-std.out -e ../slurm/${id}C-std.err call_mutations_single_mutect2.sh
 sleep 1 
-
-fi
 
 done
 
