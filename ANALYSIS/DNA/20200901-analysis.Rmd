@@ -1,0 +1,431 @@
+---
+title: "MCC Exome seq - compare tumor and cell line: filtered"
+author: "Keegan Korthauer"
+output: 
+    html_document:
+        toc: true
+        toc_float: true
+        highlight: tango
+        number_sections: true
+        code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Summary
+
+Here we take a look at the expression (exome DNA-seq) data from the samples sequenced 
+thus far for both MCC patient tumors, their matching patient-derived cell 
+lines, and normal PBMCs. 
+In this results set, all WES has been filtered for murine contamination with
+the [Xengsort tool](https://gitlab.com/genomeinformatics/xengsort/).
+
+# Workspace setup
+
+Here we'll load the necessary R packages.
+
+```{r, message = FALSE, warning = FALSE}
+library(ggplot2)
+theme_set(theme_bw())
+library(RColorBrewer) 
+library(maftools)
+library(tidyverse)
+library(data.table)
+library(readxl)
+library(dplyr)
+library(gplots)
+
+mafdir <- "../../PREPROCESS/DNA/mutect2-gatk4.1.2.0-results-xengsort/"
+
+mutsigdir <- "../../PREPROCESS/DNA/mutsigCV"
+dir.create(mutsigdir, showWarnings = FALSE)
+
+```
+
+Read in maf files:
+
+```{r}
+maf.files <- list.files(path = mafdir, pattern = "*.maf", full.names = TRUE)
+
+vcNames <- NULL
+for (mf in maf.files){
+    maf <- fread(mf)
+    vcNames <- unique(c(vcNames, names(table(maf$Variant_Classification))))
+}
+# use read.maf
+maf <- merge_mafs(maf.files) #, vc_nonSyn=vcNames)
+
+# write merged maf
+prepareMutSig(maf, fn=file.path(mutsigdir, "merged-xengsort"))
+
+maf <- read.maf(file.path(mutsigdir, "merged-xengsort.mutSig.maf"))
+
+if(!file.exists(file.path(mutsigdir, "mutation_type_dictionary_file.txt"))){
+  download.file("http://www.broadinstitute.org/cancer/cga/sites/default/files/data/tools/mutsig/reference_files/mutation_type_dictionary_file.txt", 
+    destfile = file.path(mutsigdir, "mutation_type_dictionary_file.txt"))
+}
+
+
+if(!file.exists(file.path(mutsigdir, "gene.covariates.txt"))){
+  download.file("http://www.broadinstitute.org/cancer/cga/sites/default/files/data/tools/mutsig/reference_files/gene.covariates.txt", 
+    destfile = file.path(mutsigdir, "gene.covariates.txt"))
+}
+
+
+if(!file.exists(file.path(mutsigdir, "exome_full192.coverage.zip"))){
+  download.file("http://www.broadinstitute.org/cancer/cga/sites/default/files/data/tools/mutsig/reference_files/exome_full192.coverage.zip", 
+    destfile = file.path(mutsigdir, "exome_full192.coverage.zip"))
+  unzip(file.path(mutsigdir, "exome_full192.coverage.zip"),
+    exdir = mutsigdir)
+}
+
+
+if(!file.exists(file.path(mutsigdir, "chr_files_hg19.zip"))){
+  download.file("http://www.broadinstitute.org/cancer/cga/sites/default/files/data/tools/mutsig/reference_files/chr_files_hg19.zip", 
+    destfile = file.path(mutsigdir, "chr_files_hg19.zip"))
+  unzip(file.path(mutsigdir, "chr_files_hg19.zip"),  
+    exdir = mutsigdir)
+}
+
+### run mutsigCV 
+if (!file.exists(file.path(mutsigdir, 
+  "mutsig_results_xengsort.sig_genes.txt"))){
+startdir <- getwd()
+setwd(file.path(mutsigdir, "MutSigCV_1.41"))
+mutsigdir2 <- ".."
+system(paste0("matlab -nodisplay -r 'MutSigCV('", 
+  file.path(mutsigdir2, "merged-xengsort.mutSig.maf"),  "', '",
+  file.path(mutsigdir2, "exome_full192.coverage.txt"), "', '",
+  file.path(mutsigdir2, "gene.covariates.txt"), "', '",
+  file.path(mutsigdir2, "mutsig_results_xengsort"), "', '",
+  file.path(mutsigdir2, "mutation_type_dictionary_file.txt"), "', '",
+  file.path(mutsigdir2, "chr_files_hg19"), "')'")
+)
+setwd(startdir)
+}
+
+```
+
+We'll also add in the metadata from the de-identified excel file so we can map
+the Broad sample IDs back to the original MCC patient ids. Excel file doesn't 
+contain one observation per cell, so we'll have to manually enter the information.
+
+```{r}
+# 5350 -> 336
+# 5351 -> 350
+# 5367 -> 277
+# 5368 -> 2-314 
+# 5369 -> 301
+# 5370 -> 286
+# 5474 -> 367
+# 5473 -> 320
+# 5475 -> 290
+# 5476 -> 282
+# 5477 -> 275 
+# 5478 -> 358
+# MCC001 -> 001
+
+maf@clinical.data$patient <- ifelse(grepl("5367", maf@clinical.data$Tumor_Sample_Barcode), "277",
+                               ifelse(grepl("5368", maf@clinical.data$Tumor_Sample_Barcode), "2-314",
+                                 ifelse(grepl("5369", maf@clinical.data$Tumor_Sample_Barcode), "301",
+                                   ifelse(grepl("5473", maf@clinical.data$Tumor_Sample_Barcode), "320",
+                                     ifelse(grepl("5474", maf@clinical.data$Tumor_Sample_Barcode), "367",
+                                       ifelse(grepl("5350", maf@clinical.data$Tumor_Sample_Barcode), "336",
+                                         ifelse(grepl("5351", maf@clinical.data$Tumor_Sample_Barcode), "350",
+                                          ifelse(grepl("MCC-001", maf@clinical.data$Tumor_Sample_Barcode), "001",
+
+                               NA))))))))
+maf@clinical.data$type <- ifelse(grepl("-CL-|-C-", maf@clinical.data$Tumor_Sample_Barcode), "Cell Line",
+                          "Tumor")
+
+
+viralneg <- c("286", "350", "290", "282", "320")
+maf@clinical.data$virus <- "pos"
+maf@clinical.data$virus[maf@clinical.data$patient %in% viralneg] <- "neg"
+
+maf@clinical.data
+
+getSampleSummary(maf)
+```
+
+# Summary plots
+
+Overall:
+
+```{r, maf_summary, fig.path="plots/", dev="png"}
+plotmafSummary(maf = maf, rmOutlier = FALSE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE, 
+  showBarcodes = TRUE)
+```
+
+```{r, titv_summary, fig.path="plots/", dev="png"}
+titv.maf <- titv(maf, plot=FALSE)
+titv.maf$raw.counts
+plotTiTv(titv.maf, showBarcodes=TRUE)
+```
+
+```{r, signatures, fig.path="plots/", dev="png"}
+mat <- trinucleotideMatrix(maf, 
+  ref_genome ='BSgenome.Hsapiens.UCSC.hg19',
+  prefix ='chr', add = TRUE)
+require(NMF)
+mat.sign = estimateSignatures(mat = mat,
+  nTry = 6, pConstant = 0.1, plotBestFitRes = TRUE)
+mat.sig =  extractSignatures(mat = mat, n = 2, 
+  pConstant = 0.1)
+plotSignatures(nmfRes=mat.sig)
+```
+
+Compare cell lines to tumors:
+
+```{r, enrichment, fig.path="plots/", dev="png"}
+enrich <- clinicalEnrichment(maf, 
+  clinicalFeature = "type", minMut = 2)
+#plotEnrichmentResults(enrich, pVal = 0.1)
+# no signif enrichments found
+```
+
+
+Compare viral pos to viral neg:
+
+```{r, enrichmentvirus, fig.path="plots/", dev="png"}
+enrich <- clinicalEnrichment(maf, 
+  clinicalFeature = "virus", minMut = 2)
+plotEnrichmentResults(enrich, pVal = 0.2)
+```
+
+# Co-mut plots
+
+First, we extract background mutation rate (BMR) and gene length from MutSig output, and plot overall distribution of log10-transformed measures:
+
+```{r gene-length-bmr, fig.height = 4, fig.width = 5, fig.path="plots/", dev="png"}
+bmrtab = read.table(file.path(mutsigdir, "mutsig_results.sig_genes.txt"), header=TRUE) %>%
+  mutate(bmr = -log10(x/X),
+         size = log10(N_silent + N_nonsilent),
+         combo = (bmr*size) )
+bmrtab$bmr[bmrtab$bmr==Inf] <- NA
+bmrtab$combo[bmrtab$combo==Inf] <- NA
+head(bmrtab)
+
+ggplot(bmrtab, aes(x=bmr)) + 
+ geom_histogram(bins=35)
+
+ ggplot(bmrtab, aes(x=size)) + 
+ geom_histogram(bins=35)
+
+```
+
+Co-mut plot for top 50 genes (by number of mutations), annotated with background mutation rate estimated by MutSig (left panel). Note that background mutation could not be estimated for every gene (not provided for genes with no silent mutations found in any sample). We'll source in a modified oncoplot function from the maftools package which gives some extra plotting details in the margins.
+
+Here, patient samples are grouped together, and plotted in the order of the average number of nonsilent mutations in the tumor and cell line samples.
+
+```{r comut50-bmr, fig.height = 10, fig.width = 8, fig.path="plots/", dev="png"}
+fabcolors = RColorBrewer::brewer.pal(n = 8,name = 'Set1')
+names(fabcolors) = c("320", "367", "277", "2-314", "301", "336", "350", "001")
+typecols <- rev(c("black", "grey"))
+names(typecols) <- c("Cell Line", "Tumor")
+virus <- c(pos = "#543005", neg = "#DFC27D")
+fabcolors = list(patient = fabcolors,
+                 type = typecols,
+                 virus = virus)
+
+source("20191122_oncoplotmod.R") 
+
+tab <- mafSummary(maf)$variant.classification.summary
+tab$nonsilent <- tab$total - tab$Silent
+tab$samp <- substr(tab$Tumor_Sample_Barcode, 1, 9)
+tab2 <- tab %>% 
+  group_by(samp) %>% 
+  summarize(tot_samp=mean(nonsilent)) 
+tab <- left_join(tab, tab2, "samp")
+tab <- tab[order(-tab$tot_samp, -tab$nonsilent),]
+
+oncoplot2(maf = subsetMaf(maf, genes=bmrtab$gene), 
+         top = 50,
+         clinicalFeatures = c("patient", "type", "virus"),
+         annotationColor = fabcolors,
+         fontSize = 0.8,
+         bgCol = "white",
+         removeNonMutated = FALSE,
+         sampleOrder = tab$Tumor_Sample_Barcode,
+         exprsTbl = select(bmrtab, gene, bmr),
+         drawRowBar = FALSE)
+```
+
+
+Co-mut plot for top 50 genes (by number of mutations), annotated with gene size estimated by MutSig (left panel). 
+
+```{r comut50-size, fig.height = 10, fig.width = 8, fig.path="plots/", dev=c("png", "pdf")}
+
+oncoplot2(maf = subsetMaf(maf, genes=bmrtab$gene), 
+         top = 50,
+         clinicalFeatures = c("type", "virus", "patient"),
+         annotationColor = fabcolors,
+         fontSize = 0.8,
+         bgCol = "white",
+         removeNonMutated = FALSE,
+         sampleOrder = tab$Tumor_Sample_Barcode,
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
+```
+
+
+Co-mut plot for top 200 genes (by number of mutations), annotated with gene size estimated by MutSig (left panel). 
+
+```{r comut200-size, fig.height = 10, fig.width = 8, fig.path="plots/", dev="png"}
+oncoplot2(maf = subsetMaf(maf, genes=bmrtab$gene), 
+         top = 200,
+         clinicalFeatures = c("type", "virus", "patient"),
+         annotationColor = fabcolors,
+         genenames=FALSE,
+         bgCol = "white",
+         removeNonMutated = FALSE,
+         sampleOrder = tab$Tumor_Sample_Barcode,
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
+```
+
+
+
+## Co-mut plots for APM genes
+
+Co-mut plot for the subset of Class I APM genes. 
+
+```{r comut-goi, fig.height = 10, fig.width = 8, fig.path="plots/", dev="png"}
+goi <- read_xlsx("../RNA-Seq and WGBS Gene Set for Class I APM.xlsx",col_names=FALSE)
+colnames(goi) <- c("symbol")
+
+# substitute gene symbols
+goi[goi=="PDI"] <- "PDIA2" 
+goi[goi=="CNX"] <-"CANX"
+
+#pdf("plots/oncoplot_apgenes.pdf", height = 10)
+oncoplot2(maf = maf, genes=goi$symbol, 
+         clinicalFeatures = c('type', "virus", "patient"),
+         annotationColor = fabcolors,
+         fontSize = 0.8,
+         removeNonMutated = FALSE,
+         sampleOrder = tab$Tumor_Sample_Barcode,
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
+#dev.off()
+```
+
+
+## Co-mut plots for IFNg genes
+
+Co-mut plot for the subset of IFNg genes. Genes with no silent or nonsilent mutation in any sample are excluded.
+
+```{r comut-goi-ifn, fig.height = 10, fig.width = 8, fig.path="plots/", dev="png"}
+goi <- read.table("../Reactome Interferon Signaling Gene List.txt",
+  header = TRUE)
+colnames(goi) <- c("symbol")
+
+gns <- mafSummary(maf)$gene.summary
+symbol <- as.character(goi$symbol[goi$symbol %in% gns$Hugo_Symbol])
+
+#pdf("plots/oncoplot_apgenes.pdf", height = 10)
+oncoplot2(maf = maf, genes=symbol, 
+         clinicalFeatures = c('type', "virus", "patient"),
+         annotationColor = fabcolors,
+         fontSize = 0.8,
+         removeNonMutated = FALSE,
+         sampleOrder = tab$Tumor_Sample_Barcode,
+         exprsTbl = select(bmrtab, gene, size),
+         drawRowBar = FALSE)
+#dev.off()
+```
+
+# clustering
+
+Need to construct gene by sample matrix from the tidy matrix in `maf@data`.
+
+```{r}
+tidy_maf <- maf@data
+if (ncol(tidy_maf) > length(unique(colnames(tidy_maf)))){
+  x <- match(colnames(tidy_maf), colnames(tidy_maf))
+  x <- unique(x)
+  tidy_maf <- as.data.frame(tidy_maf)[,x]
+}
+
+tidy_maf <- select(tidy_maf, Source_MAF, Hugo_Symbol) %>%
+  group_by(Source_MAF, Hugo_Symbol) %>%
+  summarize(muts = n())
+
+mat_maf <- spread(tidy_maf, Source_MAF, muts, 0) %>%
+  column_to_rownames(var = "Hugo_Symbol")
+
+head(mat_maf)
+
+tots <- rowSums(mat_maf > 0)
+head(tots[order(-tots)])
+```
+
+The matrix contains `r nrow(mat_maf)` genes with a nonsilent mutation in any sample.
+
+Now we're ready to compute distances (percentage of sites with a mutation in one or both samples that agree -- ignores sites with no mutation in either sample).
+
+```{r}
+d <- ade4::dist.binary(t(mat_maf), method = 1)
+plot(hclust(d))
+```
+
+# Percentage overlap of mutations between Tumor/Normal Pairs
+
+In the following heatmap we plot the similarity values computed in the previous section (1 minus the percentage of sites with a mutation in one or both samples that agree -- ignores sites with no mutation in either sample). Values of similarity below 0.10 are not shown. 
+
+```{r pctoverlap_TN, fig.height = 8, fig.width = 8, fig.path="plots/", dev=c("png", "pdf")}
+d <- 1-as.matrix(d)^2
+colnames(d) <- rownames(d) <- paste0(maf@clinical.data$patient,
+  "-", ifelse(grepl("Tumor", maf@clinical.data$type), "T", "C"))
+my_palette <- rev(viridis::viridis(100))
+dispvals <- signif(d,2)
+dispvals[dispvals < 0.1] <- NA
+
+heatmap.2(d, symm=TRUE, 
+  density.info="none", 
+  trace="none",
+  col=my_palette,
+  RowSideColors = c("tan", "#654321")[as.numeric(as.factor(maf@clinical.data$virus))],
+  ColSideColors = c("darkgrey", "black")[as.numeric(as.factor(maf@clinical.data$type))],
+  cellnote=dispvals)
+```
+
+## Alternate similarity metric: Percentage CL mutations also observed in T
+
+Here is an alternate metric that excludes mutations only present in tumor (as many of these are likely artefacts, especially for pdx samples).
+
+```{r}
+# construct df with each row indicating indices of columns in
+# mat_maf that correspond to a T:CL pair
+
+pair_ix <- rbind(c(1,2),
+                 c(3,4),
+                 c(5,6),
+                 c(7,8),
+                 c(9,10),
+                 c(11,12),
+                 c(13,14))
+
+pct_CL <- vector(mode="numeric", nrow(pair_ix))
+names(pct_CL) <- unlist(apply(pair_ix, 1, 
+  function(x) paste0(colnames(mat_maf)[x], collapse=":")))
+for (p in seq_len(nrow(pair_ix))){
+  pct_CL[p] <- sum(mat_maf[pair_ix[p,1]] == 1 & mat_maf[pair_ix[p,2]] == 1) /
+               sum(mat_maf[pair_ix[p,1]] == 1)
+}
+
+write.table(signif(pct_CL,3), quote=FALSE, file="plots/WES_percent_CL_muts_in_T.txt",
+  sep="\t", col.names=FALSE)
+
+```
+
+
+# Session Information
+
+```{r}
+sessionInfo()
+```

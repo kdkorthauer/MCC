@@ -133,12 +133,11 @@ fi
 #2. add /homes/keegan/vep/htslib to your PATH environment variable
 
 #export VEP_PATH=$HOME/vep
-#export VEP_DATA=/rafalab/keegan/ReferenceGenomes/.vep
+#export VEP_DATA=/rafalab/.keegan/ReferenceGenomes/.vep
 #export VER=95
 
 #curl -LO https://github.com/Ensembl/ensembl-vep/archive/release/95.3.tar.gz
 #tar -zxf 95.3.tar.gz; rm -f 95.3.tar.gz; mv ensembl-vep-release-95.3 $VEP_PATH
-#cd $VEP_PATH
 
 #export PERL5LIB=$VEP_PATH:$PERL5LIB
 #export PATH=$VEP_PATH/htslib:$PATH
@@ -146,16 +145,16 @@ fi
 # convert vcf to maf
 if [ ! -f $RESDIR/$(basename $TUMOR_BAM .bam)\.maf ]; then
   #module load tabix
-  perl mskcc-vcf2maf-5*/vcf2maf.pl \
+  perl mskcc-vcf2maf-7f3bd61/vcf2maf.pl \
     --input-vcf $RESDIR/$(basename $TUMOR_BAM .bam)\_pass.vcf \
     --output-maf $RESDIR/$(basename $TUMOR_BAM .bam)\.maf \
     --tumor-id $(basename $TUMOR_BAM .bam) \
     --normal-id $(basename $NORMAL_BAM .bam) \
     --vcf-normal-id $(basename $NORMAL_BAM2 .bam) \
-    --ref-fasta /rafalab/.keegan/ReferenceGenomes/.vep/homo_sapiens/95_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz \
+    --ref-fasta /rafalab/jill/ReferenceGenomes/.vep/homo_sapiens/95_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz \
     --vep-path ~/vep \
-    --vep-data /rafalab/.keegan/ReferenceGenomes/.vep \
-    --filter-vcf /rafalab/.keegan/ReferenceGenomes/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz \
+    --vep-data /rafalab/jill/ReferenceGenomes/.vep \
+    --filter-vcf /rafalab/jill/ReferenceGenomes/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz \
     --vep-forks 1
 fi
 

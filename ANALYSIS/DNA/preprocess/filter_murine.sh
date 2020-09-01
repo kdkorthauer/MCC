@@ -228,11 +228,6 @@ for id in 5350 5351 5367 5368 5369 5473 5474; do
   done
 done
 
--rw-r--r-- 1 keegan 6.9M Aug 17 23:50 DFCI-5350-C-01-ambiguous.1.fq
--rw-r--r-- 1 keegan  23M Aug 17 23:50 DFCI-5350-C-01-both.1.fq
--rw-r--r-- 1 keegan 1.1M Aug 17 23:50 DFCI-5350-C-01-graft.1.fq
--rw-r--r-- 1 keegan  49M Aug 17 23:50 DFCI-5350-C-01-neither.1.fq
-
 # clean up 
 # rm $FILTDIR/xengsort/*fq
 
